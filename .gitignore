@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.egg-info/
+
+# Generované reporty (přepisují se každých 5 min, do gitu nepatří)
+reports/latest_report.md
+reports/report_*.md
+
+# Lokální nastavení Claude Code
+.claude/
+
+# Prostředí
+.env
+*.env
+
+# Windows
+*.lnk
+Thumbs.db

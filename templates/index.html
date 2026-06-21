@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Analyzer</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --card2: #1c2128;
+      --border: #30363d;
+      --text: #e6edf3;
+      --sub: #8b949e;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --blue: #58a6ff;
+      --green-bg: rgba(63,185,80,0.08);
+      --red-bg: rgba(248,81,73,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 12px;
+      color: var(--sub);
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--sub);
+      flex-shrink: 0;
+    }
+    .dot.ok     { background: var(--green); }
+    .dot.error  { background: var(--red); }
+    .dot.starting { background: var(--yellow); animation: pulse 1.2s ease-in-out infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Tabs ────────────────────────────────────────────── */
+    .tabs {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      padding: 0 16px;
+      gap: 2px;
+      overflow-x: auto;
+    }
+
+    .tab {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--sub);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 9px 16px;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--blue); }
+
+    /* ── Main layout ─────────────────────────────────────── */
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 18px 16px 40px;
+    }
+
+    /* ── Loading / Error states ──────────────────────────── */
+    .loading-wrap {
+      text-align: center;
+      padding: 72px 20px;
+      color: var(--sub);
+    }
+
+    .spinner {
+      width: 30px; height: 30px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      background: rgba(248,81,73,.1);
+      border: 1px solid var(--red);
+      border-radius: 7px;
+      padding: 12px 14px;
+      color: var(--red);
+      margin-bottom: 16px;
+      font-size: 12px;
+    }
+
+    /* ── Cards ───────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .card-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--sub);
+      margin-bottom: 10px;
+    }
+
+    .card.long-side  { border-left: 3px solid var(--green); background: var(--green-bg); }
+    .card.short-side { border-left: 3px solid var(--red);   background: var(--red-bg);   }
+
+    /* ── Grids ───────────────────────────────────────────── */
+    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    @media (max-width: 680px) { .g2, .g3 { grid-template-columns: 1fr; } }
+
+    .mb { margin-bottom: 14px; }
+
+    /* ── Coin header ─────────────────────────────────────── */
+    .coin-hdr {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .coin-name  { font-size: 22px; font-weight: 700; }
+    .coin-price { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 11px;
+      border-radius: 4px;
+      border: 2px solid;
+      letter-spacing: .03em;
+    }
+    .badge.long  { color: var(--green); border-color: var(--green); }
+    .badge.short { color: var(--red);   border-color: var(--red);   }
+    .badge.wait  { color: var(--yellow);border-color: var(--yellow);}
+
+    /* ── Indicator rows ──────────────────────────────────── */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12.5px;
+    }
+    .row:last-child { border-bottom: none; }
+    .row-label { color: var(--sub); white-space: nowrap; }
+    .row-val   { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── Trade level rows ────────────────────────────────── */
+    .trade-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(48,54,61,.6);
+      font-size: 12.5px;
+    }
+    .trade-row:last-child { border-bottom: none; }
+    .t-label { color: var(--sub); }
+    .t-val   { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .t-entry { color: var(--blue);   }
+    .t-sl    { color: var(--red);    }
+    .t-tp    { color: var(--green);  }
+
+    /* ── Probability bars ────────────────────────────────── */
+    .prob-wrap { display: flex; gap: 10px; }
+    .prob-item { flex: 1; }
+    .prob-label {
+      font-size: 11px; color: var(--sub);
+      display: flex; justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .prob-bg   { background: var(--border); border-radius: 3px; height: 7px; overflow: hidden; }
+    .prob-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+    .prob-fill.long  { background: var(--green); }
+    .prob-fill.short { background: var(--red);   }
+    .prob-fill.wait  { background: var(--yellow);}
+
+    /* ── Score bar (summary) ─────────────────────────────── */
+    .score-bg   { flex: 1; background: var(--border); border-radius: 3px; height: 5px; overflow: hidden; }
+    .score-fill { height: 100%; border-radius: 3px; background: var(--blue); }
+
+    .rank-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .rank-row:last-child { border-bottom: none; }
+    .rank-num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .rank-coin { font-weight: 600; min-width: 44px; }
+
+    /* ── Watchlist ───────────────────────────────────────── */
+    .wl-item { padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .wl-item:last-child { border-bottom: none; }
+    .wl-coin { font-weight: 600; margin-bottom: 3px; }
+    .wl-up   { color: var(--green); font-size: 12px; }
+    .wl-dn   { color: var(--red);   font-size: 12px; }
+
+    /* ── Colors ──────────────────────────────────────────── */
+    .bull { color: var(--green); }
+    .bear { color: var(--red);   }
+    .neut { color: var(--yellow);}
+    .dim  { color: var(--sub);   }
+
+    /* ── Disclaimer ──────────────────────────────────────── */
+    .disclaimer {
+      font-size: 11px;
+      color: var(--sub);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📊 BTC / ETH / SOL / HYPE — Crypto Analyzer</h1>
+  <div id="status-bar">
+    <span class="dot starting" id="sdot"></span>
+    <span id="lupd">Načítám...</span>
+    <span>Příští update: <span id="cdwn">—</span>s</span>
+  </div>
+</header>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-tab="BTC/USDT">BTC</button>
+  <button class="tab" data-tab="ETH/USDT">ETH</button>
+  <button class="tab" data-tab="SOL/USDT">SOL</button>
+  <button class="tab" data-tab="HYPE/USDT">HYPE</button>
+  <button class="tab" data-tab="summary">Souhrn</button>
+</div>
+
+<main>
+  <div id="app">
+    <div class="loading-wrap">
+      <div class="spinner"></div>
+      <div>Stahuji data z burz, chvíli počkej…</div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let data = null;
+let activeTab = 'BTC/USDT';
+
+// ── Helpers ────────────────────────────────────────────────
+function fmt(v, d) {
+  if (v == null) return 'N/A';
+  if (d !== undefined) return Number(v).toLocaleString('cs', {minimumFractionDigits: d, maximumFractionDigits: d});
+  if (v >= 10000) return Number(v).toLocaleString('cs', {maximumFractionDigits: 0});
+  if (v >= 1)     return Number(v).toLocaleString('cs', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return Number(v).toLocaleString('cs', {minimumFractionDigits: 4, maximumFractionDigits: 4});
+}
+
+function cls(conclusion) {
+  if (!conclusion) return 'wait';
+  if (conclusion.includes('LONG'))  return 'long';
+  if (conclusion.includes('SHORT')) return 'short';
+  return 'wait';
+}
+
+function trendCls(t) {
+  if (t === 'BULLISH')  return 'bull';
+  if (t === 'BEARISH')  return 'bear';
+  return 'neut';
+}
+
+function conclusionLabel(c) {
+  return (c || '').replace(/[🟢🔴🟡]/gu, '').trim();
+}
+
+// ── Coin view ──────────────────────────────────────────────
+function coinHTML(a) {
+  if (a.error) return `<div class="error-banner">⚠️ ${a.error}</div>`;
+
+  const c = cls(a.conclusion);
+  const lbl = conclusionLabel(a.conclusion);
+
+  const rsiCls = a.rsi > 70 ? 'bear' : a.rsi < 30 ? 'bull' : '';
+  const divCls = (a.divergence||'').includes('BULLISH') ? 'bull'
+               : (a.divergence||'').includes('BEARISH') ? 'bear' : 'dim';
+  const vwapCls = (a.price_vs_vwap||'').includes('nad') ? 'bull' : 'bear';
+  const corrSign = a.correlation_btc != null ? (a.correlation_btc >= 0 ? '+' : '') : '';
+
+  const fundingCls = a.funding_rate > 0.0005 ? 'bear'
+                   : a.funding_rate < -0.0005 ? 'bull' : 'dim';
+
+  return `
+    <div class="coin-hdr">
+      <span class="coin-name">${a.symbol.replace('/USDT','')}</span>
+      <span class="coin-price">${fmt(a.last_price)} USDT</span>
+      <span class="badge ${c}">${lbl}</span>
+    </div>
+
+    <div class="g2">
+      <div class="card">
+        <div class="card-title">Trend &amp; Signály</div>
+        <div class="row"><span class="row-label">HTF trend (1D/4H)</span><span class="row-val ${trendCls(a.htf_trend)}">${a.htf_trend}</span></div>
+        <div class="row"><span class="row-label">STF trend (4H/1H)</span><span class="row-val ${trendCls(a.stf_trend)}">${a.stf_trend}</span></div>
+        <div class="row"><span class="row-label">VWAP pozice</span><span class="row-val ${vwapCls}">${a.price_vs_vwap || 'N/A'}</span></div>
+        <div class="row"><span class="row-label">RSI (1H)</span><span class="row-val ${rsiCls}">${a.rsi != null ? a.rsi.toFixed(1) : 'N/A'}</span></div>
+        <div class="row"><span class="row-label">Divergence</span><span class="row-val ${divCls}">${a.divergence || 'N/A'}</span></div>
+        <div class="row"><span class="row-label">ATR (1H)</span><span class="row-val">${fmt(a.atr)}</span></div>
+        <div class="row"><span class="row-label">BTC korelace</span><span class="row-val">${a.correlation_btc != null ? corrSign + a.correlation_btc.toFixed(2) : 'N/A'}</span></div>
+        <div class="row"><span class="row-label">Volume Profile</span><span class="row-val dim" style="font-size:11px">POC ${fmt(a.vp&&a.vp.poc)} | VAH ${fmt(a.vp&&a.vp.vah)} | VAL ${fmt(a.vp&&a.vp.val)}</span></div>
+        <div class="row"><span class="row-label">Funding rate</span><span class="row-val ${fundingCls}" style="font-size:11px">${a.funding_note || 'N/A'}</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Pravděpodobnost (heuristika)</div>
+        <div class="prob-wrap">
+          <div class="prob-item">
+            <div class="prob-label"><span>Long</span><span>${a.long_pct}%</span></div>
+            <div class="prob-bg"><div class="prob-fill long" style="width:${a.long_pct}%"></div></div>
+          </div>
+          <div class="prob-item">
+            <div class="prob-label"><span>Short</span><span>${a.short_pct}%</span></div>
+            <div class="prob-bg"><div class="prob-fill short" style="width:${a.short_pct}%"></div></div>
+          </div>
+          <div class="prob-item">
+            <div class="prob-label"><span>Wait</span><span>${a.wait_pct}%</span></div>
+            <div class="prob-bg"><div class="prob-fill wait" style="width:${a.wait_pct}%"></div></div>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="row"><span class="row-label">Trader Score</span><span class="row-val">${a.trader_score}/100</span></div>
+          <div class="row"><span class="row-label">Momentum</span><span class="row-val ${a.momentum_pct > 10 ? 'bull' : a.momentum_pct < -10 ? 'bear' : 'neut'}">${a.momentum_pct > 0 ? '+' : ''}${a.momentum_pct}%</span></div>
+        </div>
+        <div style="margin-top:12px; font-size:11.5px; color:var(--sub); line-height:1.6">${a.btc_influence || ''}</div>
+      </div>
+    </div>
+
+    <div class="g2">
+      <div class="card long-side">
+        <div class="card-title">🟢 Long scénář</div>
+        <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(a.long.entry)}</span></div>
+        <div class="trade-row"><span class="t-label">Stop-Loss</span><span class="t-val t-sl">${fmt(a.long.sl)}</span></div>
+        <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(a.long.tp1)}</span></div>
+        <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(a.long.tp2)}</span></div>
+        <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(a.long.tp3)}</span></div>
+      </div>
+      <div class="card short-side">
+        <div class="card-title">🔴 Short scénář</div>
+        <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(a.short.entry)}</span></div>
+        <div class="trade-row"><span class="t-label">Stop-Loss</span><span class="t-val t-sl">${fmt(a.short.sl)}</span></div>
+        <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(a.short.tp1)}</span></div>
+        <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(a.short.tp2)}</span></div>
+        <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(a.short.tp3)}</span></div>
+      </div>
+    </div>
+
+    <div class="card mb">
+      <div class="card-title">Invalidation</div>
+      <div style="font-size:12.5px">${a.invalidation || 'N/A'}</div>
+    </div>
+  `;
+}
+
+// ── Summary view ───────────────────────────────────────────
+function summaryHTML(analyses) {
+  const valid = analyses.filter(a => !a.error);
+  if (!valid.length) return '<div class="error-banner">Žádná data k zobrazení.</div>';
+
+  const ranked = [...valid].sort((a, b) => b.trader_score - a.trader_score);
+
+  const best = valid.reduce((acc, a) => {
+    const s = Math.abs(a.momentum_pct) + a.trader_score;
+    const as_ = acc ? Math.abs(acc.momentum_pct) + acc.trader_score : -1;
+    return s > as_ ? a : acc;
+  }, null);
+
+  const dir = best ? (best.conclusion.includes('LONG') ? 'LONG'
+            : best.conclusion.includes('SHORT') ? 'SHORT' : 'WAIT') : 'WAIT';
+  const bside = best ? (dir === 'LONG' ? best.long : best.short) : null;
+  const bprob = best ? (dir === 'LONG' ? best.long_pct : best.short_pct) : 0;
+
+  const rankRows = ranked.map((a, i) => `
+    <div class="rank-row">
+      <span class="rank-num">${i+1}</span>
+      <span class="rank-coin">${a.symbol.replace('/USDT','')}</span>
+      <div class="score-bg"><div class="score-fill" style="width:${a.trader_score}%"></div></div>
+      <span style="min-width:50px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px">${a.trader_score}/100</span>
+      <span class="badge ${cls(a.conclusion)}" style="font-size:10px;padding:2px 7px">${conclusionLabel(a.conclusion)}</span>
+    </div>
+  `).join('');
+
+  const momentumRows = valid.map(a => `
+    <div class="row">
+      <span class="row-label">${a.symbol.replace('/USDT','')}</span>
+      <span class="row-val ${a.momentum_pct > 10 ? 'bull' : a.momentum_pct < -10 ? 'bear' : 'neut'}">${a.momentum_pct > 0 ? '+' : ''}${a.momentum_pct}%</span>
+    </div>
+  `).join('');
+
+  const entryRows = valid.map(a => `
+    <div class="row">
+      <span class="row-label">${a.symbol.replace('/USDT','')}</span>
+      <span style="color:var(--green);font-variant-numeric:tabular-nums">L ${fmt(a.long.entry)}</span>
+      <span style="color:var(--red);font-variant-numeric:tabular-nums">S ${fmt(a.short.entry)}</span>
+    </div>
+  `).join('');
+
+  const bestBlock = best && bside ? `
+    <div class="card mb">
+      <div class="card-title">🔥 Nejlepší setup dne</div>
+      <div class="coin-hdr" style="margin-bottom:10px">
+        <span class="coin-name" style="font-size:17px">${best.symbol.replace('/USDT','')}</span>
+        <span class="badge ${cls(best.conclusion)}">${dir}</span>
+      </div>
+      <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(bside.entry)}</span></div>
+      <div class="trade-row"><span class="t-label">SL</span><span class="t-val t-sl">${fmt(bside.sl)}</span></div>
+      <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(bside.tp1)}</span></div>
+      <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(bside.tp2)}</span></div>
+      <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(bside.tp3)}</span></div>
+      <div class="trade-row"><span class="t-label">Pravděpodobnost</span><span class="t-val">${bprob}%</span></div>
+    </div>
+  ` : '';
+
+  const watchlist = valid.map(a => `
+    <div class="wl-item">
+      <div class="wl-coin">${a.symbol.replace('/USDT','')}</div>
+      <div class="wl-up">▲ Long trigger: uzavření nad ${fmt(a.swing_high)}</div>
+      <div class="wl-dn">▼ Short trigger: uzavření pod ${fmt(a.swing_low)}</div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="g2">
+      <div>
+        <div class="card mb">
+          <div class="card-title">🏆 Síla mincí — Trader Score</div>
+          ${rankRows}
+        </div>
+        <div class="card mb">
+          <div class="card-title">⚡ Momentum</div>
+          ${momentumRows}
+        </div>
+        <div class="card mb">
+          <div class="card-title">🎯 Ideální vstupy</div>
+          ${entryRows}
+        </div>
+      </div>
+      <div>
+        ${bestBlock}
+        <div class="card">
+          <div class="card-title">👀 Watchlist — triggery</div>
+          ${watchlist}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Render ─────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  if (!data || !data.analyses || !data.analyses.length) return;
+
+  let html = '';
+
+  if (data.error_msg && data.status === 'error') {
+    html += `<div class="error-banner">⚠️ Chyba při načítání dat: ${data.error_msg}</div>`;
+  }
+
+  html += `<div class="disclaimer">
+    ⚠️ Automaticky generovaná technická analýza. Trader Score, Momentum a Pravděpodobnosti jsou heuristiky
+    (lineární kombinace indikátorů), <strong>ne statisticky podložená predikce</strong> ani finanční doporučení.
+  </div>`;
+
+  if (activeTab === 'summary') {
+    html += summaryHTML(data.analyses);
+  } else {
+    const a = data.analyses.find(x => x.symbol === activeTab);
+    html += a ? coinHTML(a) : `<div class="error-banner">Data pro ${activeTab} nejsou dostupná.</div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+// ── Status bar ─────────────────────────────────────────────
+function updateStatus() {
+  if (!data) return;
+  const dot  = document.getElementById('sdot');
+  const lupd = document.getElementById('lupd');
+  dot.className = 'dot ' + (data.status || 'starting');
+  lupd.textContent = data.timestamp ? `Aktualizováno: ${data.timestamp}` : 'Načítám...';
+}
+
+function updateCountdown() {
+  const el = document.getElementById('cdwn');
+  if (!data || !data.next_update) { el.textContent = '—'; return; }
+  const rem = Math.max(0, Math.ceil(data.next_update - Date.now() / 1000));
+  el.textContent = rem;
+}
+
+// ── Fetch ──────────────────────────────────────────────────
+async function fetchData() {
+  try {
+    const r = await fetch('/api/data');
+    data = await r.json();
+    updateStatus();
+    render();
+  } catch (e) {
+    console.error('Fetch error:', e);
+  }
+}
+
+// ── Tab switching ──────────────────────────────────────────
+document.getElementById('tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  activeTab = tab.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+  render();
+});
+
+// ── Boot ───────────────────────────────────────────────────
+fetchData();
+setInterval(fetchData, 15000);
+setInterval(updateCountdown, 1000);
+</script>
+</body>
+</html>
