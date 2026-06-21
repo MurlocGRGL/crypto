@@ -249,6 +249,141 @@ def bollinger_bands(df: pd.DataFrame, period: int = 20, std_mult: float = 2.0) -
     }
 
 
+def market_structure(df: pd.DataFrame, pivot_window: int = 5, lookback: int = 60,
+                     event_lookback: int = 5) -> dict:
+    """
+    Detekuje market structure (BOS / CHoCH) z pivot high/low sekvence.
+
+    BOS  (Break of Structure) = prolomení klíčové hladiny VE směru trendu → pokračování
+    CHoCH (Change of Character) = prolomení PROTI trendu → potenciální otočení
+
+    Vrací:
+      structure: BULLISH | BEARISH | NEUTRAL
+      event:     "BOS BULLISH" | "BOS BEARISH" | "CHoCH BULLISH" | "CHoCH BEARISH" | None
+      event_candles_ago: int (0 = aktuální svíčka)
+      swing_high: poslední pivot high
+      swing_low:  poslední pivot low
+    """
+    n = len(df)
+    pw = pivot_window
+    lb = min(lookback, n - pw * 2 - 1)
+    if lb < pw * 4:
+        return None
+
+    recent = df.iloc[-lb:].reset_index(drop=True)
+    m = len(recent)
+
+    # Pivot highs a lows (lokální extrémy s `pw` svíčkami potvrzení na obou stranách)
+    highs, lows = [], []
+    for i in range(pw, m - pw):
+        h = recent["high"].iloc[i]
+        l = recent["low"].iloc[i]
+        if h == recent["high"].iloc[i - pw : i + pw + 1].max():
+            highs.append((i, float(h)))
+        if l == recent["low"].iloc[i - pw : i + pw + 1].min():
+            lows.append((i, float(l)))
+
+    if len(highs) < 2 or len(lows) < 2:
+        return {"event": None, "structure": "NEUTRAL",
+                "swing_high": None, "swing_low": None}
+
+    # Poslední 2 pivoty každého typu
+    (_, last_h), (_, prev_h) = highs[-1], highs[-2]
+    (_, last_l), (_, prev_l) = lows[-1],  lows[-2]
+
+    # Klasifikace struktury z posledního páru
+    hh = last_h > prev_h
+    hl = last_l > prev_l
+    lh = last_h < prev_h
+    ll = last_l < prev_l
+
+    if hh and hl:
+        structure = "BULLISH"
+    elif lh and ll:
+        structure = "BEARISH"
+    elif hh or hl:
+        structure = "BULLISH"
+    elif lh or ll:
+        structure = "BEARISH"
+    else:
+        structure = "NEUTRAL"
+
+    # Hledáme nejčerstvější BOS/CHoCH v posledních `event_lookback` svíčkách
+    event, key_level, candles_ago = None, None, 0
+    for offset in range(event_lookback):
+        idx = -(1 + offset)
+        c = float(recent["close"].iloc[idx])
+
+        if structure == "BULLISH":
+            if c > last_h:
+                event, key_level = "BOS BULLISH", last_h
+            elif c < last_l:
+                event, key_level = "CHoCH BEARISH", last_l
+        elif structure == "BEARISH":
+            if c < last_l:
+                event, key_level = "BOS BEARISH", last_l
+            elif c > last_h:
+                event, key_level = "CHoCH BULLISH", last_h
+
+        if event:
+            candles_ago = offset
+            break
+
+    return {
+        "event": event,
+        "event_candles_ago": candles_ago,
+        "key_level": round(key_level, 6) if key_level else None,
+        "structure": structure,
+        "swing_high": round(last_h, 6),
+        "swing_low":  round(last_l, 6),
+    }
+
+
+def volatility_regime(df: pd.DataFrame, atr_period: int = 14,
+                      bb_period: int = 20, bb_mult: float = 2.0,
+                      avg_window: int = 40) -> dict:
+    """
+    Klasifikuje volatilitní režim: TRENDING | RANGING | MIXED.
+
+    Porovnává aktuální ATR a šířku Bollingerových pásem vůči jejich klouzavému průměru.
+    Výsledek se zobrazuje jako filtr "dává tento setup smysl v aktuálním režimu?".
+    """
+    n = len(df)
+    if n < avg_window + bb_period:
+        return None
+
+    # ATR ratio
+    atr_s = atr(df, period=atr_period)
+    atr_avg = atr_s.rolling(avg_window).mean()
+    if pd.isna(atr_s.iloc[-1]) or pd.isna(atr_avg.iloc[-1]) or atr_avg.iloc[-1] == 0:
+        return None
+    atr_ratio = float(atr_s.iloc[-1] / atr_avg.iloc[-1])
+
+    # BB bandwidth ratio
+    sma = df["close"].rolling(bb_period).mean()
+    std = df["close"].rolling(bb_period).std()
+    bw  = ((sma + bb_mult * std) - (sma - bb_mult * std)) / sma.replace(0, np.nan)
+    bw_avg = bw.rolling(avg_window).mean()
+    if pd.isna(bw.iloc[-1]) or pd.isna(bw_avg.iloc[-1]) or bw_avg.iloc[-1] == 0:
+        return None
+    bw_ratio = float(bw.iloc[-1] / bw_avg.iloc[-1])
+
+    score = (atr_ratio + bw_ratio) / 2.0
+    if score > 1.20:
+        regime = "TRENDING"
+    elif score < 0.85:
+        regime = "RANGING"
+    else:
+        regime = "MIXED"
+
+    return {
+        "regime": regime,
+        "atr_ratio": round(atr_ratio, 2),
+        "bw_ratio":  round(bw_ratio, 2),
+        "score":     round(score, 2),
+    }
+
+
 def analyze_timeframe(df: pd.DataFrame) -> dict:
     """Spočítá všechny indikátory pro jeden timeframe a vrátí shrnutí."""
     if df is None or len(df) < config.ICHIMOKU_SENKOU_B + config.ICHIMOKU_KIJUN + 1:
@@ -265,6 +400,8 @@ def analyze_timeframe(df: pd.DataFrame) -> dict:
     divergence = rsi_divergence(df, rsi_series)
     macd_res = macd(df)
     bb_res = bollinger_bands(df)
+    ms = market_structure(df)
+    vr = volatility_regime(df)
 
     last_close = df["close"].iloc[-1]
     last_rsi = rsi_series.iloc[-1]
@@ -286,4 +423,6 @@ def analyze_timeframe(df: pd.DataFrame) -> dict:
         "swing_low": df["low"].iloc[-20:].min(),
         "macd": macd_res,
         "bb": bb_res,
+        "market_structure": ms,
+        "volatility_regime": vr,
     }

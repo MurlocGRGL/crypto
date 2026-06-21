@@ -157,6 +157,19 @@ def build_symbol_analysis(
     trader_score = max(0, min(100, trader_score))
     momentum_pct = round(rsi_bias * 100)
 
+    # Market structure + volatility regime — per-timeframe, prefer 1h/4h for structure
+    ms_tf = tf_1h or tf_4h or htf
+    ms = ms_tf.get("market_structure") if ms_tf else None
+    vr = ms_tf.get("volatility_regime") if ms_tf else None
+    # Collect per-timeframe ms/vr for the detailed tab
+    tf_ms_vr = {}
+    for tf_name, tf_res in tf_results.items():
+        if tf_res:
+            tf_ms_vr[tf_name] = {
+                "market_structure": tf_res.get("market_structure"),
+                "volatility_regime": tf_res.get("volatility_regime"),
+            }
+
     return {
         "symbol": symbol,
         "last_price": last_price,
@@ -195,6 +208,9 @@ def build_symbol_analysis(
         "cvd": cvd,
         "options_data": options_data,
         "liquidations": liquidations,
+        "market_structure": ms,
+        "volatility_regime": vr,
+        "tf_ms_vr": tf_ms_vr,
     }
 
 

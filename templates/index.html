@@ -222,6 +222,10 @@
     .score-bg   { flex: 1; background: var(--border); border-radius: 3px; height: 5px; overflow: hidden; }
     .score-fill { height: 100%; border-radius: 3px; background: var(--blue); }
 
+    /* ── Correlation matrix ──────────────────────────────── */
+    #corr-table th { text-align:center; font-size:12px; }
+    #corr-table td { font-size:12.5px; border-top:1px solid var(--border); }
+
     .rank-row {
       display: flex;
       align-items: center;
@@ -528,6 +532,22 @@ function coinHTML(a) {
   const fundingCls = a.funding_rate > 0.0005 ? 'bear'
                    : a.funding_rate < -0.0005 ? 'bull' : 'dim';
 
+  // Market Structure
+  const ms = a.market_structure;
+  const msCls = ms ? (ms.structure === 'BULLISH' ? 'bull' : ms.structure === 'BEARISH' ? 'bear' : 'neut') : 'dim';
+  const msEventCls = !ms?.event ? 'dim'
+    : ms.event.includes('BULLISH') ? 'bull' : 'bear';
+  const msStructText = ms ? ms.structure : 'N/A';
+  const msEventText = ms?.event
+    ? ms.event + (ms.event_candles_ago > 0 ? ` (${ms.event_candles_ago} sv. zpět)` : '')
+    : '–';
+
+  // Volatility Regime
+  const vr = a.volatility_regime;
+  const vrCls = !vr ? 'dim'
+    : vr.regime === 'TRENDING' ? 'bull' : vr.regime === 'RANGING' ? 'bear' : 'neut';
+  const vrText = vr ? `${vr.regime}  (skóre ${vr.score})` : 'N/A';
+
   // Živá cena z fast tickeru, fallback na cenu z analýzy (uzavřená svíčka)
   const _lp = data?.live_prices?.[a.symbol];
   const _livePx = _lp?.price ?? a.last_price;
@@ -552,6 +572,9 @@ function coinHTML(a) {
         <div class="row"><span class="row-label">VWAP pozice</span><span class="row-val ${vwapCls}">${a.price_vs_vwap || 'N/A'}</span></div>
         <div class="row"><span class="row-label">RSI (1H)</span><span class="row-val ${rsiCls}">${a.rsi != null ? a.rsi.toFixed(1) : 'N/A'}</span></div>
         <div class="row"><span class="row-label">Divergence</span><span class="row-val ${divCls}">${a.divergence || 'N/A'}</span></div>
+        <div class="row"><span class="row-label">Market Structure</span><span class="row-val ${msCls}">${msStructText}</span></div>
+        <div class="row"><span class="row-label">BOS / CHoCH (1H)</span><span class="row-val ${msEventCls}">${msEventText}</span></div>
+        <div class="row"><span class="row-label">Volatility Regime</span><span class="row-val ${vrCls}">${vrText}</span></div>
         <div class="row"><span class="row-label">ATR (1H)</span><span class="row-val">${fmt(a.atr)}</span></div>
         <div class="row"><span class="row-label">BTC korelace</span><span class="row-val">${a.correlation_btc != null ? corrSign + a.correlation_btc.toFixed(2) : 'N/A'}</span></div>
         <div class="row"><span class="row-label">Volume Profile</span><span class="row-val dim" style="font-size:11px">POC ${fmt(a.vp&&a.vp.poc)} | VAH ${fmt(a.vp&&a.vp.vah)} | VAL ${fmt(a.vp&&a.vp.val)}</span></div>
@@ -750,7 +773,92 @@ function summaryHTML(analyses) {
         </div>
       </div>
     </div>
+
+    ${renderCorrMatrix()}
+    ${renderPositionCalc(valid)}
   `;
+}
+
+// ── Correlation matrix ──────────────────────────────────────
+function renderCorrMatrix() {
+  const cm = data?.correlation_matrix;
+  if (!cm) return '';
+  const { symbols, matrix } = cm;
+  const cellCls = v => v >= 0.8 ? 'bull' : v <= -0.5 ? 'bear' : v >= 0.5 ? 'neut' : 'dim';
+  const hdr = symbols.map(s => `<th style="padding:5px 10px;font-weight:600;color:var(--sub)">${s}</th>`).join('');
+  const rows = matrix.map((row, i) => {
+    const cells = row.map((v, j) => {
+      const bg = i === j ? 'background:rgba(255,255,255,.04)' : '';
+      return `<td style="text-align:center;padding:5px 10px;font-variant-numeric:tabular-nums;${bg}">
+        <span class="${cellCls(v)}">${i === j ? '—' : v.toFixed(2)}</span>
+      </td>`;
+    }).join('');
+    return `<tr><td style="padding:5px 10px;font-weight:600;color:var(--fg)">${symbols[i]}</td>${cells}</tr>`;
+  }).join('');
+  return `
+    <div class="card mb">
+      <div class="card-title">Korelační matice (1H, 60 svíček)</div>
+      <div style="overflow-x:auto">
+        <table style="border-collapse:collapse;width:100%;font-size:12.5px">
+          <thead><tr><th></th>${hdr}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:10.5px;color:var(--sub);margin-top:8px">
+        Pearson korelace zavíracích cen. ≥ 0.8 = silná pozitivní, ≤ −0.5 = inverze.
+      </div>
+    </div>`;
+}
+
+// ── Position Sizing Calculator ──────────────────────────────
+function renderPositionCalc(valid) {
+  const coins = valid.map(a => ({
+    sym: a.symbol.replace('/USDT',''),
+    entry: a.long.entry, sl: a.long.sl, tp1: a.long.tp1
+  }));
+  const opts = coins.map(c =>
+    `<option value="${c.sym}" data-entry="${c.entry}" data-sl="${c.sl}" data-tp1="${c.tp1}">${c.sym}</option>`
+  ).join('');
+
+  return `
+    <div class="card mb" id="pos-calc">
+      <div class="card-title">Kalkulačka pozice</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px">
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          Coin / strana
+          <select id="pc-coin" onchange="pcUpdate()" style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+            ${opts}
+            <option value="custom">— vlastní —</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          Účet (USDT)
+          <input id="pc-acct" type="number" value="${localStorage.getItem('pc-acct')||'1000'}" oninput="pcSave('pc-acct');pcCalc()"
+            style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          Risk %
+          <input id="pc-risk" type="number" value="${localStorage.getItem('pc-risk')||'1'}" step="0.1" oninput="pcSave('pc-risk');pcCalc()"
+            style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          Vstup
+          <input id="pc-entry" type="number" step="any" oninput="pcCalc()"
+            style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          Stop-Loss
+          <input id="pc-sl" type="number" step="any" oninput="pcCalc()"
+            style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          TP1
+          <input id="pc-tp1" type="number" step="any" oninput="pcCalc()"
+            style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+        </label>
+      </div>
+      <div id="pc-result" style="font-size:13px;line-height:1.9;color:var(--fg)"></div>
+    </div>`;
 }
 
 // ── Render ─────────────────────────────────────────────────
@@ -777,6 +885,10 @@ function render() {
   }
 
   app.innerHTML = html;
+  if (activeTab === 'summary') {
+    const sel = document.getElementById('pc-coin');
+    if (sel) pcUpdate();
+  }
 }
 
 // ── Status bar ─────────────────────────────────────────────
@@ -843,6 +955,51 @@ document.getElementById('tabs').addEventListener('click', e => {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
   render();
 });
+
+// ── Position sizing calculator (globální funkce, volané z inline onXxx) ──
+function pcSave(id) { localStorage.setItem(id, document.getElementById(id).value); }
+function pcUpdate() {
+  const sel = document.getElementById('pc-coin');
+  if (!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (opt && opt.value !== 'custom') {
+    document.getElementById('pc-entry').value = parseFloat(opt.dataset.entry || 0).toPrecision(6);
+    document.getElementById('pc-sl').value    = parseFloat(opt.dataset.sl    || 0).toPrecision(6);
+    document.getElementById('pc-tp1').value   = parseFloat(opt.dataset.tp1   || 0).toPrecision(6);
+  }
+  pcCalc();
+}
+function pcCalc() {
+  const acct  = parseFloat(document.getElementById('pc-acct')?.value)  || 0;
+  const risk  = parseFloat(document.getElementById('pc-risk')?.value)  || 0;
+  const entry = parseFloat(document.getElementById('pc-entry')?.value) || 0;
+  const sl    = parseFloat(document.getElementById('pc-sl')?.value)    || 0;
+  const tp1   = parseFloat(document.getElementById('pc-tp1')?.value)   || 0;
+  const res   = document.getElementById('pc-result');
+  if (!res) return;
+  if (!acct || !risk || !entry || !sl || entry === sl) { res.innerHTML = ''; return; }
+  const riskUsd  = acct * risk / 100;
+  const slDist   = Math.abs(entry - sl);
+  const slPct    = slDist / entry * 100;
+  const qty      = riskUsd / slDist;
+  const posSize  = qty * entry;
+  const leverage = posSize / acct;
+  const sym      = (document.getElementById('pc-coin')?.value || '').replace('custom','');
+  let rrRow = '';
+  if (tp1 && tp1 !== entry) {
+    const tpDist = Math.abs(tp1 - entry);
+    const rr  = tpDist / slDist;
+    const pnl = qty * tpDist * (tp1 > entry ? 1 : -1);
+    rrRow = `<div>R:R na TP1: <strong>${rr.toFixed(2)}:1</strong>  &nbsp;|&nbsp;  P&L TP1: <strong style="color:var(--green)">${pnl >= 0 ? '+':''}${pnl.toFixed(2)} USDT</strong></div>`;
+  }
+  res.innerHTML = `
+    <div>Risk: <strong>${riskUsd.toFixed(2)} USDT</strong>  (${risk}% účtu)</div>
+    <div>SL vzdálenost: <strong>${slPct.toFixed(2)}%</strong></div>
+    <div>Množství: <strong>${qty.toPrecision(5)} ${sym}</strong></div>
+    <div>Velikost pozice: <strong>${posSize.toFixed(2)} USDT</strong>  (páka ~${leverage.toFixed(1)}×)</div>
+    ${rrRow}
+  `;
+}
 
 // ── Boot ───────────────────────────────────────────────────
 fetchData();

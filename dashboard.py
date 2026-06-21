@@ -21,6 +21,7 @@ from flask import Flask, jsonify, render_template
 
 import config
 from data_fetcher import DataFetcher
+import pandas as pd
 from indicators import analyze_timeframe, correlation_with_btc
 from liquidation_collector import start_collector, get_liq_summary
 from report_generator import build_symbol_analysis, _trend_from_ichimoku_text
@@ -32,6 +33,7 @@ _lock = threading.Lock()
 _state = {
     "analyses": [],
     "live_prices": {},          # {symbol: {price, change_24h_pct}} — fast ticker
+    "correlation_matrix": None, # {symbols: [...], matrix: [[...]]} — 4×4 tabulka
     "timestamp": None,          # čas poslední analýzy
     "next_price_ts": None,      # Unix ts příští aktualizace ceny
     "next_analysis_ts": None,   # Unix ts příšího triggeru analýzy (nejbližší 15m close)
@@ -63,6 +65,23 @@ def _to_python(obj):
     if isinstance(obj, (list, tuple)):
         return [_to_python(x) for x in obj]
     return obj
+
+
+def _compute_correlation_matrix(raw_data: dict) -> dict | None:
+    """Vypočítá párové Pearson korelace zavíracích cen (1h, 60 svíček) pro všechny symboly."""
+    closes = {}
+    for sym in config.SYMBOLS:
+        df = raw_data.get(sym, {}).get("1h")
+        if df is not None and len(df) >= 60:
+            closes[sym] = df["close"].iloc[-60:].reset_index(drop=True)
+    if len(closes) < 2:
+        return None
+    syms = list(closes.keys())
+    df_all = pd.DataFrame(closes)
+    corr = df_all.corr()
+    labels = [s.replace("/USDT", "") for s in syms]
+    matrix = [[round(float(corr.loc[a, b]), 2) for b in syms] for a in syms]
+    return {"symbols": labels, "matrix": matrix}
 
 
 def _run_full_analysis() -> list:
@@ -113,6 +132,10 @@ def _run_full_analysis() -> list:
             liquidations=liquidations,
         )
         analyses.append(a)
+
+    corr_matrix = _compute_correlation_matrix(raw_data)
+    with _lock:
+        _state["correlation_matrix"] = _to_python(corr_matrix)
 
     return analyses
 
