@@ -15,7 +15,13 @@ EXCHANGES_PRIORITY = ["binance", "bybit", "okx"]
 # Kolik svíček se stahuje na jeden timeframe (musí stačit na Ichimoku - potřebuje 52+26)
 CANDLE_LIMIT = 300
 
-# Jak často (v sekundách) se má celý cyklus opakovat, když skript běží "furt"
+# Jak často se obnoví jen CENA (ticker) — rychlý fetch bez přepočtu indikátorů
+PRICE_REFRESH_SECONDS = 90   # 1,5 minuty
+
+# Kolik sekund po uzavření svíčky se počká, než se stáhnou data (burza potřebuje chvíli)
+CANDLE_SETTLE_SECS = 10
+
+# Jak často (v sekundách) se má celý cyklus opakovat, když skript běží "furt" (CLI main.py)
 LOOP_INTERVAL_SECONDS = 300  # 5 minut
 
 # Indikátory - nastavení period

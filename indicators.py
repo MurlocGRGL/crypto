@@ -251,8 +251,11 @@ def bollinger_bands(df: pd.DataFrame, period: int = 20, std_mult: float = 2.0) -
 
 def analyze_timeframe(df: pd.DataFrame) -> dict:
     """Spočítá všechny indikátory pro jeden timeframe a vrátí shrnutí."""
-    if df is None or len(df) < config.ICHIMOKU_SENKOU_B + config.ICHIMOKU_KIJUN:
+    if df is None or len(df) < config.ICHIMOKU_SENKOU_B + config.ICHIMOKU_KIJUN + 1:
         return None
+    # Vždy pracujeme na UZAVŘENÝCH svíčkách — poslední řádek je probíhající svíčka, vynecháme ji.
+    # Tím se eliminuje problikávání indikátorů uprostřed svíčky.
+    df = df.iloc[:-1].copy()
 
     rsi_series = rsi(df)
     vwap_series = vwap(df)

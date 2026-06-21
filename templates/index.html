@@ -271,7 +271,8 @@
   <div id="status-bar">
     <span class="dot starting" id="sdot"></span>
     <span id="lupd">Načítám...</span>
-    <span>Příští update: <span id="cdwn">—</span>s</span>
+    <span class="dim" style="font-size:11px">Cena: <b id="cdwn-price" style="color:var(--text)">—</b></span>
+    <span class="dim" style="font-size:11px">Analýza (15m): <b id="cdwn-analysis" style="color:var(--text)">—</b></span>
   </div>
 </header>
 
@@ -527,10 +528,19 @@ function coinHTML(a) {
   const fundingCls = a.funding_rate > 0.0005 ? 'bear'
                    : a.funding_rate < -0.0005 ? 'bull' : 'dim';
 
+  // Živá cena z fast tickeru, fallback na cenu z analýzy (uzavřená svíčka)
+  const _lp = data?.live_prices?.[a.symbol];
+  const _livePx = _lp?.price ?? a.last_price;
+  const _chg = _lp?.change_24h_pct;
+  const _chgCls = _chg > 0 ? 'bull' : _chg < 0 ? 'bear' : 'dim';
+  const _chgHTML = _chg != null
+    ? ` <span class="${_chgCls}" style="font-size:12px">${_chg > 0 ? '+' : ''}${_chg}%</span>`
+    : '';
+
   return `
     <div class="coin-hdr">
       <span class="coin-name">${a.symbol.replace('/USDT','')}</span>
-      <span class="coin-price">${fmt(a.last_price)} USDT</span>
+      <span class="coin-price">${fmt(_livePx)} USDT${_chgHTML}</span>
       <span class="badge ${c}">${lbl}</span>
     </div>
 
@@ -778,11 +788,38 @@ function updateStatus() {
   lupd.textContent = data.timestamp ? `Aktualizováno: ${data.timestamp}` : 'Načítám...';
 }
 
+function fmtCountdown(secs) {
+  if (secs <= 0) return '0s';
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2,'0')}` : `${s}s`;
+}
+
 function updateCountdown() {
-  const el = document.getElementById('cdwn');
-  if (!data || !data.next_update) { el.textContent = '—'; return; }
-  const rem = Math.max(0, Math.ceil(data.next_update - Date.now() / 1000));
-  el.textContent = rem;
+  if (!data) return;
+  const now = Date.now() / 1000;
+  const ep = document.getElementById('cdwn-price');
+  const ea = document.getElementById('cdwn-analysis');
+  if (ep) ep.textContent = data.next_price_ts
+    ? fmtCountdown(Math.max(0, Math.ceil(data.next_price_ts - now))) : '—';
+  if (ea) ea.textContent = data.next_analysis_ts
+    ? fmtCountdown(Math.max(0, Math.ceil(data.next_analysis_ts - now))) : '—';
+}
+
+function updateTabPrices() {
+  if (!data?.live_prices) return;
+  document.querySelectorAll('.tab[data-tab$="/USDT"]').forEach(btn => {
+    const sym = btn.dataset.tab;
+    const lp = data.live_prices[sym];
+    const base = sym.replace('/USDT', '');
+    if (lp?.price != null) {
+      const arrow = lp.change_24h_pct > 0 ? ' ▲' : lp.change_24h_pct < 0 ? ' ▼' : '';
+      btn.textContent = `${base}${arrow} ${fmt(lp.price)}`;
+      btn.style.color = lp.change_24h_pct > 0 ? 'var(--green)'
+                      : lp.change_24h_pct < 0 ? 'var(--red)' : '';
+    }
+  });
+  // Zachováme .active styl — barva ho přepíše, ale border zůstane
+  document.querySelectorAll('.tab.active').forEach(t => t.style.color = '');
 }
 
 // ── Fetch ──────────────────────────────────────────────────
@@ -791,6 +828,7 @@ async function fetchData() {
     const r = await fetch('/api/data');
     data = await r.json();
     updateStatus();
+    updateTabPrices();
     render();
   } catch (e) {
     console.error('Fetch error:', e);

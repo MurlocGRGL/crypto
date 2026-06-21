@@ -147,6 +147,25 @@ class DataFetcher:
 
     # ── Tier 2 ────────────────────────────────────────────────────────────────
 
+    def fetch_live_prices(self, symbols: list) -> dict:
+        """
+        Rychlý ticker fetch pro živé ceny — bez OHLCV, bez indikátorů.
+        Vrací {symbol: {"price": float, "change_24h_pct": float}}.
+        """
+        result = {}
+        for symbol in symbols:
+            for exchange_id in config.EXCHANGES_PRIORITY:
+                try:
+                    tick = self._get_exchange(exchange_id).fetch_ticker(symbol)
+                    result[symbol] = {
+                        "price": tick.get("last"),
+                        "change_24h_pct": round(tick.get("percentage") or 0.0, 2),
+                    }
+                    break
+                except Exception:
+                    continue
+        return result
+
     def fetch_futures_basis(self, symbol: str):
         """
         Binance perpetual mark price vs index (spot basket).

@@ -4,10 +4,14 @@ Live web dashboard.
 Spuštění: python dashboard.py
 Otevři prohlížeč na http://localhost:5000
 
-Data se přepočítávají na pozadí každých LOOP_INTERVAL_SECONDS (config.py).
-Stránka se sama přepočítá každých 15 sekund přes /api/data.
+Architektura aktualizací:
+  - Cena (live_prices): každých PRICE_REFRESH_SECONDS sekund — pouze ticker, žádné indikátory
+  - Indikátory + závěr (analyses): po uzavření 15m svíčky + CANDLE_SETTLE_SECS buffer
+    (nikdy se nepřepočítává na rozpracované svíčce)
+  - Stránka si data tahá každých 15s přes /api/data
 """
 
+import math
 import time
 import threading
 import traceback
@@ -27,12 +31,17 @@ start_collector()   # WebSocket stream !forceOrder@arr, ukládá do liquidations
 _lock = threading.Lock()
 _state = {
     "analyses": [],
-    "timestamp": None,
-    "next_update": None,
+    "live_prices": {},          # {symbol: {price, change_24h_pct}} — fast ticker
+    "timestamp": None,          # čas poslední analýzy
+    "next_price_ts": None,      # Unix ts příští aktualizace ceny
+    "next_analysis_ts": None,   # Unix ts příšího triggeru analýzy (nejbližší 15m close)
     "status": "starting",
     "error_msg": None,
 }
 _fetcher = DataFetcher()
+
+# Délky timeframe v sekundách (svíčky jsou zarovnané na Unix epochu)
+_TF_SECS = {"15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
 
 
 def _to_python(obj):
@@ -56,7 +65,8 @@ def _to_python(obj):
     return obj
 
 
-def _run_cycle():
+def _run_full_analysis() -> list:
+    """Stáhne OHLCV, spočítá indikátory a derivátová data pro všechny symboly."""
     raw_data = _fetcher.fetch_all(config.SYMBOLS, config.TIMEFRAMES, limit=config.CANDLE_LIMIT)
 
     analyzed = {}
@@ -107,32 +117,93 @@ def _run_cycle():
     return analyses
 
 
+def _next_15m_close(now: float) -> float:
+    """Unix ts nejbližšího příštího uzavření 15m svíčky."""
+    return math.ceil(now / 900) * 900
+
+
 def background_loop():
+    """
+    Smyčka řízená událostmi:
+      - Spí přesně do příštího relevantního eventu (cena nebo uzavření svíčky).
+      - Analýza se spustí jen po uzavření 15m svíčky + CANDLE_SETTLE_SECS buffer.
+      - Cena se aktualizuje každých PRICE_REFRESH_SECONDS (rychlý ticker, bez OHLCV).
+    """
+    # Inicializace: zaznamenáme aktuální uzavřené svíčky jako "již zpracované",
+    # takže se hned nespustí analýza — necháme proběhnout první explicitní cyklus níže.
+    now = time.time()
+    _last_analyzed_close = {tf: math.floor(now / secs) * secs for tf, secs in _TF_SECS.items()}
+    _last_price_ts = 0.0   # 0 = hned při startu aktualizuj cenu
+    first_run = True
+
     while True:
-        try:
-            print(f"[{datetime.now().isoformat(timespec='seconds')}] Stahuji data...")
-            analyses = _run_cycle()
-            now = datetime.now()
-            next_ts = time.time() + config.LOOP_INTERVAL_SECONDS
+        now = time.time()
 
-            with _lock:
-                _state["analyses"] = _to_python(analyses)
-                _state["timestamp"] = now.strftime("%Y-%m-%d %H:%M:%S")
-                _state["next_update"] = next_ts
-                _state["status"] = "ok"
-                _state["error_msg"] = None
+        # ── Zjisti, co je potřeba udělat ─────────────────────────────────────
+        price_needed = (now - _last_price_ts) >= config.PRICE_REFRESH_SECONDS
 
-            print(f"Hotovo. Příští aktualizace za {config.LOOP_INTERVAL_SECONDS}s.")
-        except Exception:
-            err = traceback.format_exc()
-            print(f"[CHYBA]\n{err}")
-            with _lock:
-                _state["status"] = "error"
-                _state["error_msg"] = err.splitlines()[-1]
-                if not _state.get("next_update"):
-                    _state["next_update"] = time.time() + 60
+        # Analýza: hledáme TF, jehož svíčka se uzavřela a ještě nebyla zpracována.
+        # Čekáme CANDLE_SETTLE_SECS, aby burza stihla data finalizovat.
+        newly_closed = {}
+        for tf, secs in _TF_SECS.items():
+            last_close = math.floor(now / secs) * secs
+            settle_ok = now >= last_close + config.CANDLE_SETTLE_SECS
+            if last_close > _last_analyzed_close[tf] and settle_ok:
+                newly_closed[tf] = last_close
 
-        time.sleep(config.LOOP_INTERVAL_SECONDS)
+        analysis_needed = first_run or bool(newly_closed)
+
+        # ── Provádíme akce ───────────────────────────────────────────────────
+        if analysis_needed:
+            closed_str = ", ".join(newly_closed.keys()) if newly_closed else "init"
+            print(f"[{datetime.now().isoformat(timespec='seconds')}] "
+                  f"Analyza (trigger: {closed_str})...")
+            try:
+                analyses = _run_full_analysis()
+                prices = _fetcher.fetch_live_prices(config.SYMBOLS)
+                now_ts = datetime.now()
+                for tf, close_ts in newly_closed.items():
+                    _last_analyzed_close[tf] = close_ts
+                if first_run:
+                    for tf, secs in _TF_SECS.items():
+                        _last_analyzed_close[tf] = math.floor(time.time() / secs) * secs
+                with _lock:
+                    _state["analyses"] = _to_python(analyses)
+                    _state["live_prices"] = prices
+                    _state["timestamp"] = now_ts.strftime("%Y-%m-%d %H:%M:%S")
+                    _state["status"] = "ok"
+                    _state["error_msg"] = None
+                _last_price_ts = time.time()
+                first_run = False
+                print("Hotovo.")
+            except Exception:
+                err = traceback.format_exc()
+                print(f"[CHYBA]\n{err}")
+                with _lock:
+                    _state["status"] = "error"
+                    _state["error_msg"] = err.splitlines()[-1]
+                first_run = False
+
+        elif price_needed:
+            try:
+                prices = _fetcher.fetch_live_prices(config.SYMBOLS)
+                with _lock:
+                    _state["live_prices"] = prices
+            except Exception:
+                pass
+            _last_price_ts = time.time()
+
+        # ── Spočítej, kdy nastat příštímu eventu ─────────────────────────────
+        now = time.time()
+        next_price = _last_price_ts + config.PRICE_REFRESH_SECONDS
+        next_15m   = _next_15m_close(now) + config.CANDLE_SETTLE_SECS
+
+        with _lock:
+            _state["next_price_ts"]    = next_price
+            _state["next_analysis_ts"] = next_15m
+
+        sleep_time = max(5.0, min(next_price, next_15m) - now)
+        time.sleep(sleep_time)
 
 
 @app.route("/")
@@ -150,8 +221,8 @@ if __name__ == "__main__":
     t = threading.Thread(target=background_loop, daemon=True)
     t.start()
     print("=" * 55)
-    print("  Dashboard spuštěn na http://localhost:5000")
-    print(f"  Data se načítají každých {config.LOOP_INTERVAL_SECONDS}s (config.py).")
-    print("  Ctrl+C pro ukončení.")
+    print("  Dashboard spusten na http://localhost:5000")
+    print(f"  Cena: kazdy {config.PRICE_REFRESH_SECONDS}s | Analyza: po uzavreni 15m svicky")
+    print("  Ctrl+C pro ukonceni.")
     print("=" * 55)
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
