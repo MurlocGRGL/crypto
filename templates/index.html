@@ -174,6 +174,8 @@
     .badge.long  { color: var(--green); border-color: var(--green); }
     .badge.short { color: var(--red);   border-color: var(--red);   }
     .badge.wait  { color: var(--yellow);border-color: var(--yellow);}
+    .badge.bull-bg { background:rgba(46,204,113,.15); color:var(--green); border-color:var(--green); }
+    .badge.bear-bg { background:rgba(231,76,60,.15);  color:var(--red);   border-color:var(--red);   }
 
     /* ── Indicator rows ──────────────────────────────────── */
     .row {
@@ -225,6 +227,78 @@
     /* ── Correlation matrix ──────────────────────────────── */
     #corr-table th { text-align:center; font-size:12px; }
     #corr-table td { font-size:12.5px; border-top:1px solid var(--border); }
+
+    /* ── Portfolio & Journal forms / tables ──────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+    .form-grid label { display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--sub); }
+    .form-grid input, .form-grid select {
+      background: var(--panel); border: 1px solid var(--border);
+      color: var(--fg); padding: 6px 9px; border-radius: 4px; font-size:13px;
+    }
+    .form-grid button {
+      background: var(--blue); color: #fff; border: none;
+      padding: 7px 16px; border-radius: 4px; cursor: pointer; font-size:13px;
+      align-self: end;
+    }
+    .form-grid button:hover { opacity:.85; }
+
+    .pf-table, .jnl-table {
+      width: 100%; border-collapse: collapse; font-size: 12.5px;
+    }
+    .pf-table th, .jnl-table th {
+      text-align: left; padding: 6px 10px;
+      color: var(--sub); font-weight: 600; border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .pf-table td, .jnl-table td {
+      padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,.04);
+      vertical-align: middle;
+    }
+    .pf-table tr:last-child td, .jnl-table tr:last-child td { border-bottom: none; }
+    .pf-table .act-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--sub); padding: 3px 9px; border-radius: 3px;
+      cursor: pointer; font-size: 11px; margin-right: 4px;
+    }
+    .pf-table .act-btn:hover { border-color: var(--fg); color: var(--fg); }
+    .pf-table .act-btn.close-btn { border-color: var(--green); color: var(--green); }
+    .pf-table .act-btn.del-btn   { border-color: var(--red);   color: var(--red);   }
+
+    .risk-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; margin: 4px 0;
+    }
+    .risk-cell { display:flex; flex-direction:column; gap:3px; }
+    .risk-label { font-size:11px; color:var(--sub); }
+    .risk-val   { font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; }
+
+    .warn-banner {
+      background: rgba(241,196,15,.10); border: 1px solid rgba(241,196,15,.35);
+      color: var(--yellow); border-radius:5px; padding: 8px 14px;
+      font-size: 12.5px; margin-bottom: 10px;
+    }
+    .stop-hit {
+      background: rgba(231,76,60,.12); border: 1px solid rgba(231,76,60,.35);
+      color: var(--red); border-radius:5px; padding: 8px 14px; font-size:12.5px; margin-bottom:10px;
+    }
+
+    .jnl-table select, .jnl-table input[type="text"], .jnl-table input[type="number"] {
+      background: var(--panel); border: 1px solid var(--border);
+      color: var(--fg); padding: 3px 7px; border-radius: 3px;
+      font-size: 11.5px; max-width: 120px;
+    }
+    .jnl-table input[type="text"] { max-width: 180px; }
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px;
+    }
+    .stat-cell { background: var(--panel); border-radius:5px; padding:10px 14px; }
+    .stat-cell .s-label { font-size:11px; color:var(--sub); margin-bottom:4px; }
+    .stat-cell .s-val   { font-size:20px; font-weight:700; }
 
     .rank-row {
       display: flex;
@@ -286,6 +360,8 @@
   <button class="tab" data-tab="SOL/USDT">SOL</button>
   <button class="tab" data-tab="HYPE/USDT">HYPE</button>
   <button class="tab" data-tab="summary">Souhrn</button>
+  <button class="tab" data-tab="portfolio">Portfolio</button>
+  <button class="tab" data-tab="journal">Deník</button>
 </div>
 
 <main>
@@ -877,7 +953,11 @@ function render() {
     (lineární kombinace indikátorů), <strong>ne statisticky podložená predikce</strong> ani finanční doporučení.
   </div>`;
 
-  if (activeTab === 'summary') {
+  if (activeTab === 'portfolio') {
+    html += portfolioHTML(portfolioData);
+  } else if (activeTab === 'journal') {
+    html += journalHTML(journalData);
+  } else if (activeTab === 'summary') {
     html += summaryHTML(data.analyses);
   } else {
     const a = data.analyses.find(x => x.symbol === activeTab);
@@ -953,8 +1033,368 @@ document.getElementById('tabs').addEventListener('click', e => {
   if (!tab) return;
   activeTab = tab.dataset.tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+  if (activeTab === 'portfolio') fetchPortfolio();
+  else if (activeTab === 'journal') fetchJournal();
   render();
 });
+
+// ── Portfolio ───────────────────────────────────────────────
+let portfolioData = null;
+
+async function fetchPortfolio() {
+  try {
+    const r = await fetch('/api/portfolio');
+    portfolioData = await r.json();
+    if (activeTab === 'portfolio') render();
+  } catch(e) { console.error('portfolio fetch', e); }
+}
+
+async function addPosition(ev) {
+  ev.preventDefault();
+  const sym   = document.getElementById('pf-sym').value;
+  const side  = document.getElementById('pf-side').value;
+  const entry = document.getElementById('pf-entry').value;
+  const size  = document.getElementById('pf-size').value;
+  const sl    = document.getElementById('pf-sl').value;
+  if (!entry || !size) return;
+  const r = await fetch('/api/portfolio/position', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({symbol:sym, side, entry_price:entry, size_usdt:size, sl_price:sl||null}),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    document.getElementById('pf-entry').value = '';
+    document.getElementById('pf-size').value  = '';
+    document.getElementById('pf-sl').value    = '';
+    fetchPortfolio();
+  } else { alert('Chyba: ' + d.error); }
+}
+
+async function closePosition(id, livePx) {
+  const px = prompt('Zavírací cena:', livePx ?? '');
+  if (!px) return;
+  const r = await fetch(`/api/portfolio/position/${id}/close`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({close_price: px}),
+  });
+  const d = await r.json();
+  if (d.ok) fetchPortfolio(); else alert('Chyba: ' + d.error);
+}
+
+async function deletePosition(id) {
+  if (!confirm('Smazat pozici?')) return;
+  await fetch(`/api/portfolio/position/${id}`, {method:'DELETE'});
+  fetchPortfolio();
+}
+
+async function savePortfolioSettings(ev) {
+  ev.preventDefault();
+  const body = {
+    account_size: document.getElementById('pf-acct').value || null,
+    daily_stop:   document.getElementById('pf-daily').value  || null,
+    weekly_stop:  document.getElementById('pf-weekly').value || null,
+  };
+  await fetch('/api/portfolio/settings', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+  });
+  fetchPortfolio();
+}
+
+function portfolioHTML(pd) {
+  if (!pd) return '<div class="loading-wrap"><div class="spinner"></div></div>';
+
+  const pnlCls = v => v > 0 ? 'bull' : v < 0 ? 'bear' : 'dim';
+  const fmtPnl = v => v == null ? '–' : (v >= 0 ? '+' : '') + v.toFixed(2) + ' $';
+  const s = pd.settings || {};
+
+  // Stop limit warnings
+  let warnings = '';
+  pd.corr_warnings.forEach(w => {
+    warnings += `<div class="warn-banner">⚠ Korelační riziko: ${w.coins.join(' + ')} obě ${w.side} (korelace ${w.corr.toFixed(2)}) — pohybují se stejným směrem, zdvojená expozice</div>`;
+  });
+  if (s.daily_stop && pd.today_pnl <= -Math.abs(s.daily_stop)) {
+    warnings += `<div class="stop-hit">🛑 Denní stop dosažen: ${fmtPnl(pd.today_pnl)} (limit ${fmtPnl(-s.daily_stop)})</div>`;
+  } else if (s.daily_stop && pd.today_pnl < 0) {
+    const pct = Math.abs(pd.today_pnl / s.daily_stop * 100);
+    if (pct > 70) warnings += `<div class="warn-banner">⚠ Přibližuješ se k dennímu stopu (${pct.toFixed(0)}% vyčerpáno): ${fmtPnl(pd.today_pnl)}</div>`;
+  }
+  if (s.weekly_stop && pd.week_pnl <= -Math.abs(s.weekly_stop)) {
+    warnings += `<div class="stop-hit">🛑 Týdenní stop dosažen: ${fmtPnl(pd.week_pnl)} (limit ${fmtPnl(-s.weekly_stop)})</div>`;
+  }
+
+  // Open positions table
+  const posRows = pd.open_positions.length ? pd.open_positions.map(p => {
+    const pnl = p.live_pnl;
+    const slDist = p.sl_dist_pct != null ? `<span class="dim">(${p.sl_dist_pct}% do SL)</span>` : '';
+    return `<tr>
+      <td><strong>${p.symbol.replace('/USDT','')}</strong></td>
+      <td><span class="badge ${p.side==='LONG'?'bull-bg':'bear-bg'}" style="font-size:10px;padding:2px 7px">${p.side}</span></td>
+      <td style="font-variant-numeric:tabular-nums">${fmt(p.entry_price)}</td>
+      <td style="font-variant-numeric:tabular-nums">${p.live_price ? fmt(p.live_price) : '–'}</td>
+      <td class="${pnlCls(pnl)}" style="font-variant-numeric:tabular-nums">${fmtPnl(pnl)}</td>
+      <td style="font-variant-numeric:tabular-nums">${p.sl_price ? fmt(p.sl_price) : '–'} ${slDist}</td>
+      <td style="font-variant-numeric:tabular-nums">${fmt(p.size_usdt)} $</td>
+      <td>
+        <button class="act-btn close-btn" onclick="closePosition(${p.id}, ${p.live_price ?? 'null'})">Zavřít</button>
+        <button class="act-btn del-btn"   onclick="deletePosition(${p.id})">✕</button>
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--sub);padding:18px">Žádné otevřené pozice</td></tr>`;
+
+  // Exposure breakdown
+  const expRows = Object.entries(pd.exposure_by_sym).map(([sym, usd]) => {
+    const pct = pd.total_exposure > 0 ? usd / pd.total_exposure * 100 : 0;
+    return `<div class="row"><span class="row-label">${sym}</span>
+      <span class="row-val">${usd.toFixed(0)} $</span>
+      <div style="flex:1;background:var(--border);border-radius:2px;height:4px;margin:0 8px">
+        <div style="width:${pct.toFixed(0)}%;height:100%;background:var(--blue);border-radius:2px"></div>
+      </div>
+      <span class="dim" style="font-size:11px;min-width:32px;text-align:right">${pct.toFixed(0)}%</span>
+    </div>`;
+  }).join('');
+
+  // Closed recent
+  const closedRows = pd.closed_recent.length ? pd.closed_recent.map(p => `
+    <tr>
+      <td>${p.symbol.replace('/USDT','')}</td>
+      <td><span style="color:${p.side==='LONG'?'var(--green)':'var(--red)'}">${p.side}</span></td>
+      <td style="font-variant-numeric:tabular-nums">${fmt(p.entry_price)} → ${fmt(p.close_price)}</td>
+      <td class="${pnlCls(p.pnl_usdt)}" style="font-variant-numeric:tabular-nums">${fmtPnl(p.pnl_usdt)}</td>
+      <td class="dim" style="font-size:11px">${p.closed_ts ? new Date(p.closed_ts*1000).toLocaleString('cs-CZ',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}</td>
+    </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--sub);padding:12px">Žádné uzavřené pozice</td></tr>`;
+
+  return `
+    ${warnings}
+
+    <div class="card mb">
+      <div class="card-title">Nová pozice</div>
+      <form onsubmit="addPosition(event)">
+        <div class="form-grid">
+          <label>Coin
+            <select id="pf-sym">
+              <option value="BTC/USDT">BTC</option>
+              <option value="ETH/USDT">ETH</option>
+              <option value="SOL/USDT">SOL</option>
+              <option value="HYPE/USDT">HYPE</option>
+            </select>
+          </label>
+          <label>Strana
+            <select id="pf-side">
+              <option value="LONG">LONG</option>
+              <option value="SHORT">SHORT</option>
+            </select>
+          </label>
+          <label>Vstupní cena
+            <input id="pf-entry" type="number" step="any" placeholder="63 000">
+          </label>
+          <label>Velikost (USDT)
+            <input id="pf-size" type="number" step="any" placeholder="500">
+          </label>
+          <label>Stop-Loss
+            <input id="pf-sl" type="number" step="any" placeholder="volitelné">
+          </label>
+          <label>&nbsp;<button type="submit">+ Přidat pozici</button></label>
+        </div>
+      </form>
+    </div>
+
+    <div class="card mb">
+      <div class="card-title">Otevřené pozice</div>
+      <div style="overflow-x:auto">
+        <table class="pf-table">
+          <thead><tr>
+            <th>Coin</th><th>Strana</th><th>Vstup</th><th>Cena</th>
+            <th>P&amp;L</th><th>SL</th><th>Velikost</th><th>Akce</th>
+          </tr></thead>
+          <tbody>${posRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="g2">
+      <div class="card mb">
+        <div class="card-title">Přehled expozice &amp; P&amp;L</div>
+        <div class="risk-grid" style="margin-bottom:14px">
+          <div class="risk-cell">
+            <div class="risk-label">Nerealizovaný P&amp;L</div>
+            <div class="risk-val ${pnlCls(pd.total_open_pnl)}">${fmtPnl(pd.total_open_pnl)}</div>
+          </div>
+          <div class="risk-cell">
+            <div class="risk-label">Dnešní P&amp;L (UTC)</div>
+            <div class="risk-val ${pnlCls(pd.today_pnl)}">${fmtPnl(pd.today_pnl)}</div>
+          </div>
+          <div class="risk-cell">
+            <div class="risk-label">Týdenní P&amp;L (UTC)</div>
+            <div class="risk-val ${pnlCls(pd.week_pnl)}">${fmtPnl(pd.week_pnl)}</div>
+          </div>
+          <div class="risk-cell">
+            <div class="risk-label">Max drawdown</div>
+            <div class="risk-val bear">${fmtPnl(pd.max_drawdown)}</div>
+          </div>
+          <div class="risk-cell">
+            <div class="risk-label">Celková expozice</div>
+            <div class="risk-val">${pd.total_exposure.toFixed(0)} $</div>
+          </div>
+          <div class="risk-cell">
+            <div class="risk-label">Páka (expozice/účet)</div>
+            <div class="risk-val">${pd.leverage != null ? pd.leverage.toFixed(2) + '×' : '–'}</div>
+          </div>
+        </div>
+        ${expRows ? `<div style="margin-top:10px">${expRows}</div>` : ''}
+      </div>
+
+      <div class="card mb">
+        <div class="card-title">Stop limity &amp; nastavení</div>
+        <form onsubmit="savePortfolioSettings(event)">
+          <div class="form-grid" style="margin-bottom:12px">
+            <label>Velikost účtu (USDT)
+              <input id="pf-acct"   type="number" step="any" value="${s.account_size ?? ''}">
+            </label>
+            <label>Denní stop (USDT ztráty)
+              <input id="pf-daily"  type="number" step="any" value="${s.daily_stop  ?? ''}">
+            </label>
+            <label>Týdenní stop (USDT ztráty)
+              <input id="pf-weekly" type="number" step="any" value="${s.weekly_stop ?? ''}">
+            </label>
+            <label>&nbsp;<button type="submit">Uložit</button></label>
+          </div>
+        </form>
+        <div style="font-size:11px;color:var(--sub)">Jen vizuální upozornění, nic automatického.</div>
+      </div>
+    </div>
+
+    <div class="card mb">
+      <div class="card-title">Nedávno uzavřené pozice</div>
+      <div style="overflow-x:auto">
+        <table class="pf-table">
+          <thead><tr><th>Coin</th><th>Strana</th><th>Vstup → Výstup</th><th>P&amp;L</th><th>Uzavřeno</th></tr></thead>
+          <tbody>${closedRows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ── Journal ─────────────────────────────────────────────────
+let journalData = null;
+
+async function fetchJournal() {
+  try {
+    const r = await fetch('/api/journal');
+    journalData = await r.json();
+    if (activeTab === 'journal') render();
+  } catch(e) { console.error('journal fetch', e); }
+}
+
+async function updateJournal(id, field, value) {
+  await fetch(`/api/journal/${id}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({[field]: value || null}),
+  });
+  // No full re-render — just silent save
+}
+
+function journalHTML(jd) {
+  if (!jd) return '<div class="loading-wrap"><div class="spinner"></div></div>';
+  const entries = jd.entries || [];
+  const stats   = jd.stats   || {};
+
+  const conclusionCls = c => c && c.includes('LONG') ? 'bull' : c && c.includes('SHORT') ? 'bear' : 'neut';
+  const resultCls = r => r === 'WIN' ? 'bull' : r === 'LOSS' ? 'bear' : r === 'BE' ? 'neut' : 'dim';
+
+  const statCards = `
+    <div class="stat-grid mb">
+      <div class="stat-cell">
+        <div class="s-label">Záznamy s výsledkem</div>
+        <div class="s-val">${stats.total_with_result ?? 0}</div>
+      </div>
+      <div class="stat-cell">
+        <div class="s-label">Win rate</div>
+        <div class="s-val ${stats.win_rate >= 50 ? 'bull' : stats.win_rate != null ? 'bear' : ''}">${stats.win_rate != null ? stats.win_rate + '%' : '–'}</div>
+      </div>
+      <div class="stat-cell">
+        <div class="s-label">Prům. score výher</div>
+        <div class="s-val bull">${stats.avg_score_win ?? '–'}</div>
+      </div>
+      <div class="stat-cell">
+        <div class="s-label">Prům. score proher</div>
+        <div class="s-val bear">${stats.avg_score_loss ?? '–'}</div>
+      </div>
+      ${Object.entries(stats.by_conclusion || {}).map(([c, cs]) =>
+        `<div class="stat-cell">
+          <div class="s-label">Přesnost ${c.replace('🟢','').replace('🔴','').replace('🟡','').trim()}</div>
+          <div class="s-val ${conclusionCls(c)}">${cs.wins}/${cs.total}</div>
+        </div>`
+      ).join('')}
+    </div>`;
+
+  const rows = entries.length ? entries.map(e => {
+    const dt = new Date(e.ts * 1000).toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const conc = (e.conclusion||'').replace('🟢','').replace('🔴','').replace('🟡','').trim();
+    return `<tr>
+      <td class="dim" style="font-size:11px;white-space:nowrap">${dt}</td>
+      <td><strong>${e.symbol.replace('/USDT','')}</strong></td>
+      <td><span class="${conclusionCls(e.conclusion)}">${conc}</span></td>
+      <td style="font-variant-numeric:tabular-nums">${e.trader_score ?? '–'}</td>
+      <td class="dim" style="font-size:11px;font-variant-numeric:tabular-nums">${e.long_pct}/${e.short_pct}/${e.wait_pct}</td>
+      <td style="font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums">
+        L@${e.long_entry ? Number(e.long_entry).toFixed(2) : '–'}
+      </td>
+      <td>
+        <select onchange="updateJournal(${e.id},'action',this.value)" style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:3px 6px;border-radius:3px;font-size:11.5px">
+          <option value="" ${!e.action?'selected':''}>– akce –</option>
+          <option value="LONG"  ${e.action==='LONG' ?'selected':''}>Vstoupil LONG</option>
+          <option value="SHORT" ${e.action==='SHORT'?'selected':''}>Vstoupil SHORT</option>
+          <option value="SKIP"  ${e.action==='SKIP' ?'selected':''}>Přeskočil</option>
+        </select>
+      </td>
+      <td>
+        <select onchange="updateJournal(${e.id},'result',this.value)" style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:3px 6px;border-radius:3px;font-size:11.5px">
+          <option value="" ${!e.result?'selected':''}>– výsledek –</option>
+          <option value="WIN"  ${e.result==='WIN' ?'selected':''} class="bull">WIN</option>
+          <option value="LOSS" ${e.result==='LOSS'?'selected':''} class="bear">LOSS</option>
+          <option value="BE"   ${e.result==='BE'  ?'selected':''}>BE</option>
+        </select>
+      </td>
+      <td>
+        <input type="number" step="any" placeholder="P&L $"
+          value="${e.pnl_usdt ?? ''}"
+          onblur="updateJournal(${e.id},'pnl_usdt',this.value)"
+          style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:3px 7px;border-radius:3px;font-size:11.5px;width:80px">
+      </td>
+      <td>
+        <input type="text" placeholder="poznámka…"
+          value="${(e.notes||'').replace(/"/g,'&quot;')}"
+          onblur="updateJournal(${e.id},'notes',this.value)"
+          style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:3px 7px;border-radius:3px;font-size:11.5px;width:160px">
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="10" style="text-align:center;color:var(--sub);padding:18px">Zatím žádné záznamy — vzniknou automaticky po první analýze.</td></tr>`;
+
+  return `
+    <div class="card mb">
+      <div class="card-title">Statistika přesnosti</div>
+      ${statCards}
+      <div style="font-size:11px;color:var(--sub)">
+        Pouze záznamy kde jsou vyplněny Akce + Výsledek. Cíl: zjistit, zda Trader Score/Pravděpodobnosti sedí na realitu.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Záznamy (posledních ${entries.length})</div>
+      <div style="overflow-x:auto">
+        <table class="jnl-table">
+          <thead><tr>
+            <th>Čas</th><th>Coin</th><th>Závěr</th><th>Score</th>
+            <th>L/S/W%</th><th>Vstup L</th><th>Akce</th><th>Výsledek</th><th>P&amp;L $</th><th>Poznámka</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
 
 // ── Position sizing calculator (globální funkce, volané z inline onXxx) ──
 function pcSave(id) { localStorage.setItem(id, document.getElementById(id).value); }

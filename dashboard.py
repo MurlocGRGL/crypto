@@ -17,7 +17,7 @@ import threading
 import traceback
 from datetime import datetime
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 import config
 from data_fetcher import DataFetcher
@@ -25,9 +25,11 @@ import pandas as pd
 from indicators import analyze_timeframe, correlation_with_btc
 from liquidation_collector import start_collector, get_liq_summary
 from report_generator import build_symbol_analysis, _trend_from_ichimoku_text
+import portfolio as pf
 
 app = Flask(__name__)
 start_collector()   # WebSocket stream !forceOrder@arr, ukládá do liquidations.db
+pf.init_db()        # portfolio.db — pozice + deník
 
 _lock = threading.Lock()
 _state = {
@@ -137,6 +139,8 @@ def _run_full_analysis() -> list:
     with _lock:
         _state["correlation_matrix"] = _to_python(corr_matrix)
 
+    pf.log_setups(analyses)   # auto-log do trading deníku (1× za hodinu na symbol)
+
     return analyses
 
 
@@ -238,6 +242,77 @@ def index():
 def api_data():
     with _lock:
         return jsonify(dict(_state))
+
+
+# ── Portfolio API ─────────────────────────────────────────────────────────────
+
+@app.route("/api/portfolio")
+def api_portfolio():
+    with _lock:
+        lp = dict(_state["live_prices"])
+        cm = _state.get("correlation_matrix")
+    return jsonify(pf.get_portfolio_summary(lp, cm))
+
+
+@app.route("/api/portfolio/position", methods=["POST"])
+def api_add_position():
+    d = request.json or {}
+    try:
+        pos_id = pf.add_position(
+            symbol=d["symbol"],
+            side=d["side"],
+            entry_price=float(d["entry_price"]),
+            size_usdt=float(d["size_usdt"]),
+            sl_price=float(d["sl_price"]) if d.get("sl_price") else None,
+        )
+        return jsonify({"ok": True, "id": pos_id})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@app.route("/api/portfolio/position/<int:pos_id>/close", methods=["POST"])
+def api_close_position(pos_id):
+    d = request.json or {}
+    try:
+        updated = pf.close_position(pos_id, float(d["close_price"]))
+        if updated:
+            return jsonify({"ok": True, "position": updated})
+        return jsonify({"ok": False, "error": "Pozice nenalezena"}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@app.route("/api/portfolio/position/<int:pos_id>", methods=["DELETE"])
+def api_delete_position(pos_id):
+    return jsonify({"ok": pf.delete_position(pos_id)})
+
+
+@app.route("/api/portfolio/settings", methods=["POST"])
+def api_portfolio_settings():
+    d = request.json or {}
+    kwargs = {}
+    for key in ("daily_stop", "weekly_stop", "account_size"):
+        if key in d:
+            kwargs[key] = float(d[key]) if d[key] not in (None, "") else None
+    settings = pf.update_settings(**kwargs)
+    return jsonify({"ok": True, "settings": settings})
+
+
+# ── Journal API ───────────────────────────────────────────────────────────────
+
+@app.route("/api/journal")
+def api_journal():
+    return jsonify(pf.get_journal())
+
+
+@app.route("/api/journal/<int:entry_id>", methods=["POST"])
+def api_update_journal(entry_id):
+    d = request.json or {}
+    ok = pf.update_journal_entry(entry_id, **{
+        k: v for k, v in d.items()
+        if k in ("action", "result", "notes", "pnl_usdt")
+    })
+    return jsonify({"ok": ok})
 
 
 if __name__ == "__main__":

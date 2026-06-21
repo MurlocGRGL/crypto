@@ -1,7 +1,13 @@
 """
 Konfigurace BTC/ETH/SOL/HYPE analyzátoru.
+Citlivé hodnoty (API klíče, tokeny) se čtou z .env – nikdy je nepište přímo sem.
 Uprav si tu cokoliv potřebuješ - symboly, timeframy, interval běhu atd.
 """
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Mince, které se sledují
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "HYPE/USDT"]
