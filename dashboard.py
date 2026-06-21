@@ -79,6 +79,9 @@ def _run_cycle():
         funding_rate, open_interest = _fetcher.fetch_funding_and_oi(symbol)
         ls_long, ls_short = _fetcher.fetch_long_short_ratio(symbol)
         oi_history = _fetcher.fetch_oi_history(symbol)
+        basis = _fetcher.fetch_futures_basis(symbol)
+        cvd = _fetcher.fetch_cvd(symbol)
+        options_data = _fetcher.fetch_options_data(symbol)
 
         a = build_symbol_analysis(
             symbol,
@@ -91,6 +94,9 @@ def _run_cycle():
             ls_short=ls_short,
             oi_history=oi_history,
             fear_greed=fear_greed,
+            basis=basis,
+            cvd=cvd,
+            options_data=options_data,
         )
         analyses.append(a)
 

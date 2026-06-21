@@ -40,6 +40,10 @@ def build_symbol_analysis(
     ls_short: float = None,
     oi_history: dict = None,
     fear_greed: dict = None,
+    # Tier 2
+    basis: dict = None,
+    cvd: dict = None,
+    options_data: dict = None,
 ) -> dict:
     """tf_results: {timeframe: analyze_timeframe() output or None}"""
     tf_1d = tf_results.get("1d")
@@ -186,6 +190,9 @@ def build_symbol_analysis(
         "ls_short": ls_short,
         "oi_history": oi_history,
         "fear_greed": fear_greed,
+        "basis": basis,
+        "cvd": cvd,
+        "options_data": options_data,
     }
 
 

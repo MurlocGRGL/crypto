@@ -392,6 +392,74 @@ function renderSentiment(a) {
   return h;
 }
 
+// ── Tier 2: Futures Basis & CVD ────────────────────────────
+function renderBasisCvd(a) {
+  const fmtM = v => {
+    const abs = Math.abs(v);
+    const s = v < 0 ? '-' : '+';
+    if (abs >= 1e9) return s + '$' + (abs/1e9).toFixed(2) + 'B';
+    if (abs >= 1e6) return s + '$' + (abs/1e6).toFixed(1) + 'M';
+    if (abs >= 1e3) return s + '$' + (abs/1e3).toFixed(0) + 'K';
+    return s + '$' + abs;
+  };
+  let h = '';
+
+  if (a.basis) {
+    const bp = a.basis.basis_pct;
+    const bc = bp > 0.02 ? 'bull' : bp < -0.02 ? 'bear' : 'dim';
+    const sign = bp >= 0 ? '+' : '';
+    h += `<div class="row"><span class="row-label">Futures basis</span>
+            <span class="row-val ${bc}">${sign}${bp.toFixed(4)}%</span></div>
+          <div class="row"><span class="row-label dim" style="font-size:11px">Mark / Index</span>
+            <span class="row-val dim" style="font-size:11px">${fmt(a.basis.mark_price)} / ${fmt(a.basis.index_price)}</span></div>`;
+  } else {
+    h += '<div class="row"><span class="row-label">Futures basis</span><span class="row-val dim">N/A</span></div>';
+  }
+
+  if (a.cvd) {
+    const dp = a.cvd.delta_pct;
+    const cc = dp > 5 ? 'bull' : dp < -5 ? 'bear' : '';
+    h += `<div class="row" style="margin-top:6px"><span class="row-label">CVD 1H delta</span>
+            <span class="row-val ${cc}">${fmtM(a.cvd.delta_usd)} (${dp > 0 ? '+' : ''}${dp}%)</span></div>
+          <div class="row"><span class="row-label dim" style="font-size:11px">Buy / Sell</span>
+            <span class="row-val dim" style="font-size:11px">
+              <span class="bull">$${(a.cvd.buy_usd/1e6).toFixed(1)}M▲</span>
+              &nbsp;/&nbsp;
+              <span class="bear">$${(a.cvd.sell_usd/1e6).toFixed(1)}M▼</span>
+            </span></div>`;
+  } else {
+    h += '<div class="row" style="margin-top:6px"><span class="row-label">CVD 1H</span><span class="row-val dim">N/A</span></div>';
+  }
+  return h;
+}
+
+// ── Tier 2: Options (Deribit) ──────────────────────────────
+function renderOptions(a) {
+  const sym = (a.symbol || '').replace('/USDT', '');
+  if (!['BTC','ETH'].includes(sym)) {
+    return '<div class="row dim" style="font-size:12px;padding-top:4px">Opční trh: pouze BTC a ETH mají likvidní opce na Deribit.</div>';
+  }
+  if (!a.options_data) {
+    return '<div class="row"><span class="row-label">Deribit data</span><span class="row-val dim">Nedostupná</span></div>';
+  }
+  const od = a.options_data;
+  const pc = od.pc_ratio_oi;
+  // P/C OI > 1.2 = bearish (víc putů), < 0.7 = bullish (víc callů)
+  const pcc = pc != null ? (pc > 1.2 ? 'bear' : pc < 0.7 ? 'bull' : '') : '';
+  const ivCls = od.atm_iv != null ? (od.atm_iv > 80 ? 'bear' : od.atm_iv < 40 ? 'bull' : '') : '';
+  const exp = od.near_expiry || '–';
+
+  let h = `<div class="row"><span class="row-label">Exp. (front month)</span>
+              <span class="row-val dim">${exp}</span></div>
+            <div class="row"><span class="row-label">P/C OI ratio</span>
+              <span class="row-val ${pcc}">${pc != null ? pc : 'N/A'}<span class="dim" style="font-size:10px">&nbsp;(&gt;1 = víc putů)</span></span></div>
+            <div class="row"><span class="row-label">P/C Volume ratio</span>
+              <span class="row-val">${od.pc_ratio_vol != null ? od.pc_ratio_vol : 'N/A'}</span></div>
+            <div class="row"><span class="row-label">ATM IV (front)</span>
+              <span class="row-val ${ivCls}">${od.atm_iv != null ? od.atm_iv + '%' : 'N/A'}</span></div>`;
+  return h;
+}
+
 // ── Coin view ──────────────────────────────────────────────
 function coinHTML(a) {
   if (a.error) return `<div class="error-banner">⚠️ ${a.error}</div>`;
@@ -461,6 +529,17 @@ function coinHTML(a) {
       <div class="card">
         <div class="card-title">Sentiment &amp; Deriváty</div>
         ${renderSentiment(a)}
+      </div>
+    </div>
+
+    <div class="g2">
+      <div class="card">
+        <div class="card-title">Futures Basis &amp; CVD (1H)</div>
+        ${renderBasisCvd(a)}
+      </div>
+      <div class="card">
+        <div class="card-title">Options — Deribit</div>
+        ${renderOptions(a)}
       </div>
     </div>
 
