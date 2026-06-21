@@ -918,6 +918,11 @@ function renderPositionCalc(valid) {
             style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
         </label>
         <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
+          Max páka ×
+          <input id="pc-maxlev" type="number" value="${localStorage.getItem('pc-maxlev')||'5'}" step="0.5" min="1" oninput="pcSave('pc-maxlev');pcCalc()"
+            style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)">
           Vstup
           <input id="pc-entry" type="number" step="any" oninput="pcCalc()"
             style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:4px">
@@ -1410,33 +1415,60 @@ function pcUpdate() {
   pcCalc();
 }
 function pcCalc() {
-  const acct  = parseFloat(document.getElementById('pc-acct')?.value)  || 0;
-  const risk  = parseFloat(document.getElementById('pc-risk')?.value)  || 0;
-  const entry = parseFloat(document.getElementById('pc-entry')?.value) || 0;
-  const sl    = parseFloat(document.getElementById('pc-sl')?.value)    || 0;
-  const tp1   = parseFloat(document.getElementById('pc-tp1')?.value)   || 0;
-  const res   = document.getElementById('pc-result');
+  const acct   = parseFloat(document.getElementById('pc-acct')?.value)   || 0;
+  const risk   = parseFloat(document.getElementById('pc-risk')?.value)   || 0;
+  const maxLev = parseFloat(document.getElementById('pc-maxlev')?.value) || Infinity;
+  const entry  = parseFloat(document.getElementById('pc-entry')?.value)  || 0;
+  const sl     = parseFloat(document.getElementById('pc-sl')?.value)     || 0;
+  const tp1    = parseFloat(document.getElementById('pc-tp1')?.value)    || 0;
+  const res    = document.getElementById('pc-result');
   if (!res) return;
   if (!acct || !risk || !entry || !sl || entry === sl) { res.innerHTML = ''; return; }
-  const riskUsd  = acct * risk / 100;
-  const slDist   = Math.abs(entry - sl);
-  const slPct    = slDist / entry * 100;
-  const qty      = riskUsd / slDist;
-  const posSize  = qty * entry;
-  const leverage = posSize / acct;
-  const sym      = (document.getElementById('pc-coin')?.value || '').replace('custom','');
+
+  const slDist = Math.abs(entry - sl);
+  const slPct  = slDist / entry * 100;
+  const sym    = (document.getElementById('pc-coin')?.value || '').replace('custom', '');
+
+  // Primární výpočet: podle Risk %
+  const riskUsd     = acct * risk / 100;
+  const qtyByRisk   = riskUsd / slDist;
+  const posByRisk   = qtyByRisk * entry;
+  const levByRisk   = posByRisk / acct;
+
+  // Strop páky
+  const cappedByLev = levByRisk > maxLev;
+  const posSize     = cappedByLev ? acct * maxLev : posByRisk;
+  const qty         = posSize / entry;
+  const leverage    = posSize / acct;
+
+  // Skutečný risk při omezeném stopu
+  const actualRiskUsd = qty * slDist;
+  const actualRiskPct = actualRiskUsd / acct * 100;
+
+  let levWarn = '';
+  if (cappedByLev) {
+    levWarn = `<div style="background:rgba(241,196,15,.12);border:1px solid rgba(241,196,15,.4);
+      color:var(--yellow);border-radius:4px;padding:6px 10px;margin-bottom:4px;font-size:12.5px">
+      ⚠ Páka zkrácena z ${levByRisk.toFixed(1)}× na ${maxLev}× — velikost pozice snížena.<br>
+      Skutečný risk: <strong>${actualRiskUsd.toFixed(2)} USDT (${actualRiskPct.toFixed(2)}% účtu)</strong>
+      místo zadaných ${riskUsd.toFixed(2)} USDT (${risk}%).
+    </div>`;
+  }
+
   let rrRow = '';
   if (tp1 && tp1 !== entry) {
     const tpDist = Math.abs(tp1 - entry);
     const rr  = tpDist / slDist;
     const pnl = qty * tpDist * (tp1 > entry ? 1 : -1);
-    rrRow = `<div>R:R na TP1: <strong>${rr.toFixed(2)}:1</strong>  &nbsp;|&nbsp;  P&L TP1: <strong style="color:var(--green)">${pnl >= 0 ? '+':''}${pnl.toFixed(2)} USDT</strong></div>`;
+    rrRow = `<div>R:R na TP1: <strong>${rr.toFixed(2)}:1</strong>  &nbsp;|&nbsp;  P&L TP1: <strong style="color:var(--green)">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT</strong></div>`;
   }
+
   res.innerHTML = `
-    <div>Risk: <strong>${riskUsd.toFixed(2)} USDT</strong>  (${risk}% účtu)</div>
+    ${levWarn}
+    <div>Risk: <strong>${actualRiskUsd.toFixed(2)} USDT</strong> (${actualRiskPct.toFixed(2)}% účtu)</div>
     <div>SL vzdálenost: <strong>${slPct.toFixed(2)}%</strong></div>
     <div>Množství: <strong>${qty.toPrecision(5)} ${sym}</strong></div>
-    <div>Velikost pozice: <strong>${posSize.toFixed(2)} USDT</strong>  (páka ~${leverage.toFixed(1)}×)</div>
+    <div>Velikost pozice: <strong>${posSize.toFixed(2)} USDT</strong>  (páka ${leverage.toFixed(1)}×)</div>
     ${rrRow}
   `;
 }
