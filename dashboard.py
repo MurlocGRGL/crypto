@@ -68,6 +68,8 @@ def _run_cycle():
         if btc_tf:
             btc_trend = _trend_from_ichimoku_text(btc_tf["ichimoku_text"])
 
+    fear_greed = _fetcher.fetch_fear_greed()
+
     analyses = []
     for symbol in config.SYMBOLS:
         corr = None
@@ -75,6 +77,8 @@ def _run_cycle():
             corr = correlation_with_btc(raw_data.get(symbol, {}).get("1h"), btc_df_1h)
 
         funding_rate, open_interest = _fetcher.fetch_funding_and_oi(symbol)
+        ls_long, ls_short = _fetcher.fetch_long_short_ratio(symbol)
+        oi_history = _fetcher.fetch_oi_history(symbol)
 
         a = build_symbol_analysis(
             symbol,
@@ -83,6 +87,10 @@ def _run_cycle():
             correlation_btc=corr,
             funding_rate=funding_rate,
             open_interest=open_interest,
+            ls_long=ls_long,
+            ls_short=ls_short,
+            oi_history=oi_history,
+            fear_greed=fear_greed,
         )
         analyses.append(a)
 

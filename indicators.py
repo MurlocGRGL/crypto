@@ -1,5 +1,6 @@
 """
-Technické indikátory: RSI, VWAP, Ichimoku, Volume Profile, RSI divergence.
+Technické indikátory: RSI, VWAP, ATR, Ichimoku, Volume Profile,
+RSI divergence, BTC korelace, MACD, Bollinger Bands.
 Vstupem je vždy pandas DataFrame se sloupci open/high/low/close/volume.
 """
 
@@ -16,12 +17,10 @@ def rsi(df: pd.DataFrame, period: int = config.RSI_PERIOD) -> pd.Series:
     avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0, np.nan)
     rsi_series = 100 - (100 / (1 + rs))
-    rsi_series = rsi_series.fillna(50)
-    return rsi_series
+    return rsi_series.fillna(50)
 
 
 def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Average True Range - měřítko volatility, použité pro adaptivní SL."""
     high, low, close = df["high"], df["low"], df["close"]
     prev_close = close.shift(1)
     tr = pd.concat(
@@ -31,7 +30,6 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 
 def vwap(df: pd.DataFrame) -> pd.Series:
-    """VWAP počítané přes celé stažené okno (anchored na první svíčku v datasetu)."""
     typical_price = (df["high"] + df["low"] + df["close"]) / 3
     cum_vol = df["volume"].cumsum()
     cum_vol_price = (typical_price * df["volume"]).cumsum()
@@ -40,7 +38,6 @@ def vwap(df: pd.DataFrame) -> pd.Series:
 
 def ichimoku(df: pd.DataFrame):
     high, low, close = df["high"], df["low"], df["close"]
-
     tenkan = (high.rolling(config.ICHIMOKU_TENKAN).max() + low.rolling(config.ICHIMOKU_TENKAN).min()) / 2
     kijun = (high.rolling(config.ICHIMOKU_KIJUN).max() + low.rolling(config.ICHIMOKU_KIJUN).min()) / 2
     senkou_a = ((tenkan + kijun) / 2).shift(config.ICHIMOKU_KIJUN)
@@ -48,18 +45,10 @@ def ichimoku(df: pd.DataFrame):
         (high.rolling(config.ICHIMOKU_SENKOU_B).max() + low.rolling(config.ICHIMOKU_SENKOU_B).min()) / 2
     ).shift(config.ICHIMOKU_KIJUN)
     chikou = close.shift(-config.ICHIMOKU_KIJUN)
-
-    return {
-        "tenkan": tenkan,
-        "kijun": kijun,
-        "senkou_a": senkou_a,
-        "senkou_b": senkou_b,
-        "chikou": chikou,
-    }
+    return {"tenkan": tenkan, "kijun": kijun, "senkou_a": senkou_a, "senkou_b": senkou_b, "chikou": chikou}
 
 
 def ichimoku_signal(df: pd.DataFrame, ichi: dict) -> str:
-    """Zjednodušené čtení mraku: cena nad/pod/v mraku + tenkan/kijun cross."""
     price = df["close"].iloc[-1]
     sa = ichi["senkou_a"].iloc[-1]
     sb = ichi["senkou_b"].iloc[-1]
@@ -70,7 +59,6 @@ def ichimoku_signal(df: pd.DataFrame, ichi: dict) -> str:
         return "nedostatek dat"
 
     cloud_top, cloud_bottom = max(sa, sb), min(sa, sb)
-
     if price > cloud_top:
         position = "nad mrakem (bullish struktura)"
     elif price < cloud_bottom:
@@ -92,10 +80,6 @@ def ichimoku_signal(df: pd.DataFrame, ichi: dict) -> str:
 
 
 def volume_profile(df: pd.DataFrame, bins: int = config.VOLUME_PROFILE_BINS):
-    """
-    Rozdělí cenové rozpětí okna do binů, sečte objem v každém binu,
-    najde POC (Point of Control) a Value Area (VAH/VAL).
-    """
     price_min = df["low"].min()
     price_max = df["high"].max()
     if price_max == price_min:
@@ -113,10 +97,8 @@ def volume_profile(df: pd.DataFrame, bins: int = config.VOLUME_PROFILE_BINS):
     poc_idx = int(np.argmax(bin_volumes))
     poc_price = (bin_edges[poc_idx] + bin_edges[poc_idx + 1]) / 2
 
-    # Value area - rozšiřujeme od POC, dokud nemáme VALUE_AREA_PCT objemu
     total_volume = bin_volumes.sum()
     target = total_volume * config.VALUE_AREA_PCT
-    included = {poc_idx}
     acc = bin_volumes[poc_idx]
     lo, hi = poc_idx, poc_idx
     while acc < target and (lo > 0 or hi < bins - 1):
@@ -125,28 +107,18 @@ def volume_profile(df: pd.DataFrame, bins: int = config.VOLUME_PROFILE_BINS):
         if right_vol >= left_vol:
             hi += 1
             acc += bin_volumes[hi]
-            included.add(hi)
         else:
             lo -= 1
             acc += bin_volumes[lo]
-            included.add(lo)
 
-    vah = bin_edges[hi + 1]
-    val = bin_edges[lo]
-
-    return {"poc": poc_price, "vah": vah, "val": val}
+    return {"poc": poc_price, "vah": bin_edges[hi + 1], "val": bin_edges[lo]}
 
 
 def _local_extrema(series: pd.Series, order: int = 3, min_distance: int = 5, min_amplitude_pct: float = 0.4):
-    """
-    Najde indexy lokálních maxim a minim (swing detektor).
-    Filtruje šum: po sobě jdoucí piloty musí být aspoň `min_distance` svíček
-    od sebe a lišit se o aspoň `min_amplitude_pct` % ceny, jinak se ignorují.
-    """
     raw_highs, raw_lows = [], []
     vals = series.values
     for i in range(order, len(vals) - order):
-        window = vals[i - order : i + order + 1]
+        window = vals[i - order: i + order + 1]
         if vals[i] == window.max() and vals[i] != vals[i - 1]:
             raw_highs.append(i)
         if vals[i] == window.min() and vals[i] != vals[i - 1]:
@@ -171,13 +143,8 @@ def _local_extrema(series: pd.Series, order: int = 3, min_distance: int = 5, min
 
 
 def rsi_divergence(df: pd.DataFrame, rsi_series: pd.Series, lookback: int = 60):
-    """
-    Zjednodušená detekce RSI divergence na posledních `lookback` svíčkách.
-    Porovná poslední dva swing highy / lowy v ceně vs. RSI.
-    """
     window_close = df["close"].iloc[-lookback:].reset_index(drop=True)
     window_rsi = rsi_series.iloc[-lookback:].reset_index(drop=True)
-
     price_highs, price_lows = _local_extrema(window_close, order=3)
     result = "žádná zjevná divergence"
 
@@ -194,11 +161,7 @@ def rsi_divergence(df: pd.DataFrame, rsi_series: pd.Series, lookback: int = 60):
     return result
 
 
-def correlation_with_btc(df_symbol: pd.DataFrame, df_btc: pd.DataFrame, window: int = 50) -> float:
-    """
-    Rolling Pearson korelace výnosů (returns) altcoinu vůči BTC za posledních `window` svíček.
-    Vrací hodnotu -1..1 (None pokud nelze spočítat).
-    """
+def correlation_with_btc(df_symbol: pd.DataFrame, df_btc: pd.DataFrame, window: int = 50):
     if df_symbol is None or df_btc is None:
         return None
     n = min(len(df_symbol), len(df_btc), window)
@@ -212,6 +175,80 @@ def correlation_with_btc(df_symbol: pd.DataFrame, df_btc: pd.DataFrame, window: 
     return float(corr)
 
 
+def macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal_period: int = 9) -> dict:
+    """MACD – momentum indikátor (EMA12 - EMA26, signal EMA9, histogram)."""
+    close = df["close"]
+    ema_fast = close.ewm(span=fast, adjust=False).mean()
+    ema_slow = close.ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal_period, adjust=False).mean()
+    histogram = macd_line - signal_line
+
+    m = float(macd_line.iloc[-1])
+    s = float(signal_line.iloc[-1])
+    h = float(histogram.iloc[-1])
+    h_prev = float(histogram.iloc[-2]) if len(histogram) > 1 else h
+
+    # Crossover = přechod histogramu přes nulu
+    if h > 0 and h_prev <= 0:
+        signal_text = "bullish crossover ▲"
+    elif h < 0 and h_prev >= 0:
+        signal_text = "bearish crossover ▼"
+    elif m > s:
+        signal_text = "nad signal (bullish)"
+    else:
+        signal_text = "pod signal (bearish)"
+
+    return {
+        "macd": m,
+        "signal": s,
+        "histogram": h,
+        "histogram_growing": h > h_prev,
+        "signal_text": signal_text,
+    }
+
+
+def bollinger_bands(df: pd.DataFrame, period: int = 20, std_mult: float = 2.0) -> dict:
+    """Bollingerova pásma – SMA20 ± 2σ, pozice ceny v pásmu (%B)."""
+    close = df["close"]
+    mid = close.rolling(period).mean()
+    std = close.rolling(period).std(ddof=0)
+    upper = mid + std_mult * std
+    lower = mid - std_mult * std
+
+    u = float(upper.iloc[-1])
+    m = float(mid.iloc[-1])
+    l = float(lower.iloc[-1])
+    last = float(close.iloc[-1])
+
+    if pd.isna(u) or pd.isna(l) or (u == l):
+        return {"upper": None, "middle": None, "lower": None,
+                "pct_b": None, "bandwidth": None, "signal_text": "N/A"}
+
+    pct_b = (last - l) / (u - l)
+    bandwidth = (u - l) / m if m else 0.0
+
+    if pct_b > 1.0:
+        signal_text = "nad horním pásmem"
+    elif pct_b > 0.8:
+        signal_text = "blízko horního pásma"
+    elif pct_b < 0.0:
+        signal_text = "pod dolním pásmem"
+    elif pct_b < 0.2:
+        signal_text = "blízko dolního pásma"
+    else:
+        signal_text = "uvnitř pásma"
+
+    return {
+        "upper": u,
+        "middle": m,
+        "lower": l,
+        "pct_b": round(pct_b, 3),
+        "bandwidth": round(bandwidth, 4),
+        "signal_text": signal_text,
+    }
+
+
 def analyze_timeframe(df: pd.DataFrame) -> dict:
     """Spočítá všechny indikátory pro jeden timeframe a vrátí shrnutí."""
     if df is None or len(df) < config.ICHIMOKU_SENKOU_B + config.ICHIMOKU_KIJUN:
@@ -223,6 +260,8 @@ def analyze_timeframe(df: pd.DataFrame) -> dict:
     ichi = ichimoku(df)
     vp = volume_profile(df)
     divergence = rsi_divergence(df, rsi_series)
+    macd_res = macd(df)
+    bb_res = bollinger_bands(df)
 
     last_close = df["close"].iloc[-1]
     last_rsi = rsi_series.iloc[-1]
@@ -242,4 +281,6 @@ def analyze_timeframe(df: pd.DataFrame) -> dict:
         "candle_count": len(df),
         "swing_high": df["high"].iloc[-20:].max(),
         "swing_low": df["low"].iloc[-20:].min(),
+        "macd": macd_res,
+        "bb": bb_res,
     }

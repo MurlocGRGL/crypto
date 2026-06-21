@@ -36,6 +36,10 @@ def build_symbol_analysis(
     correlation_btc: float = None,
     funding_rate: float = None,
     open_interest: float = None,
+    ls_long: float = None,
+    ls_short: float = None,
+    oi_history: dict = None,
+    fear_greed: dict = None,
 ) -> dict:
     """tf_results: {timeframe: analyze_timeframe() output or None}"""
     tf_1d = tf_results.get("1d")
@@ -58,6 +62,8 @@ def build_symbol_analysis(
     # Momentum reference (1H, fallback nejmenší dostupný TF)
     momentum_tf = tf_1h or tf_15m or list(available.values())[0]
     rsi_val = momentum_tf["rsi"]
+    macd_data = momentum_tf.get("macd")
+    bb_data = momentum_tf.get("bb")
 
     last_price = (tf_15m or tf_1h or tf_4h or tf_1d)["last_close"]
 
@@ -174,6 +180,12 @@ def build_symbol_analysis(
         "rsi": rsi_val,
         "divergence": entry_tf["divergence"],
         "price_vs_vwap": momentum_tf.get("price_vs_vwap", "N/A"),
+        "macd": macd_data,
+        "bb": bb_data,
+        "ls_long": ls_long,
+        "ls_short": ls_short,
+        "oi_history": oi_history,
+        "fear_greed": fear_greed,
     }
 
 
