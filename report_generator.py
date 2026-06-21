@@ -44,6 +44,7 @@ def build_symbol_analysis(
     basis: dict = None,
     cvd: dict = None,
     options_data: dict = None,
+    liquidations: dict = None,
 ) -> dict:
     """tf_results: {timeframe: analyze_timeframe() output or None}"""
     tf_1d = tf_results.get("1d")
@@ -193,6 +194,7 @@ def build_symbol_analysis(
         "basis": basis,
         "cvd": cvd,
         "options_data": options_data,
+        "liquidations": liquidations,
     }
 
 

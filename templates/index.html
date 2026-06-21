@@ -460,6 +460,57 @@ function renderOptions(a) {
   return h;
 }
 
+// ── Tier 2: Likvidace (live WebSocket history) ─────────────
+function renderLiquidations(a) {
+  const liq = a.liquidations;
+  if (!liq) return '<div class="dim" style="font-size:12px">Data nedostupná.</div>';
+
+  const fmtM = v => {
+    if (!v) return '$0';
+    if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B';
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K';
+    return '$' + v;
+  };
+
+  const period = (stats, label) => {
+    const total = (stats.long_usd || 0) + (stats.short_usd || 0);
+    if (total === 0) return `
+      <div>
+        <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:4px">${label}</div>
+        <div class="dim" style="font-size:11px">žádné</div>
+      </div>`;
+    // bar: červená = long liq (bearish), zelená = short liq (bullish)
+    const longPct = Math.round(stats.long_usd / total * 100);
+    const shortPct = 100 - longPct;
+    return `
+      <div>
+        <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:4px">${label}</div>
+        <div class="row"><span class="bear">LONG liq</span><span style="margin-left:auto">${fmtM(stats.long_usd)}<span class="dim" style="font-size:10px"> (${stats.long_count})</span></span></div>
+        <div class="row"><span class="bull">SHORT liq</span><span style="margin-left:auto">${fmtM(stats.short_usd)}<span class="dim" style="font-size:10px"> (${stats.short_count})</span></span></div>
+        <div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;display:flex;overflow:hidden">
+          <div style="width:${longPct}%;background:var(--red);opacity:.8" title="${longPct}% long liq"></div>
+          <div style="width:${shortPct}%;background:var(--green);opacity:.8" title="${shortPct}% short liq"></div>
+        </div>
+      </div>`;
+  };
+
+  const statusLine = liq.collecting
+    ? `<span class="bull">●</span> Stream aktivní — ${liq.total} zachycených liq. pro tuto minci`
+    : `<span class="dim">○ Kolektor neběží</span>`;
+
+  return `
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">${statusLine}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      ${period(liq['1h'],  '1H')}
+      ${period(liq['4h'],  '4H')}
+      ${period(liq['24h'], '24H')}
+    </div>
+    <div style="font-size:10px;color:var(--sub);margin-top:6px">
+      LONG liq = nucený prodej long pozice → bearish tlak &nbsp;|&nbsp; SHORT liq = nucený nákup → bullish tlak
+    </div>`;
+}
+
 // ── Coin view ──────────────────────────────────────────────
 function coinHTML(a) {
   if (a.error) return `<div class="error-banner">⚠️ ${a.error}</div>`;
@@ -541,6 +592,11 @@ function coinHTML(a) {
         <div class="card-title">Options — Deribit</div>
         ${renderOptions(a)}
       </div>
+    </div>
+
+    <div class="card mb">
+      <div class="card-title">Likvidace — live stream (od spuštění appky)</div>
+      ${renderLiquidations(a)}
     </div>
 
     <div class="g2">

@@ -18,9 +18,11 @@ from flask import Flask, jsonify, render_template
 import config
 from data_fetcher import DataFetcher
 from indicators import analyze_timeframe, correlation_with_btc
+from liquidation_collector import start_collector, get_liq_summary
 from report_generator import build_symbol_analysis, _trend_from_ichimoku_text
 
 app = Flask(__name__)
+start_collector()   # WebSocket stream !forceOrder@arr, ukládá do liquidations.db
 
 _lock = threading.Lock()
 _state = {
@@ -82,6 +84,7 @@ def _run_cycle():
         basis = _fetcher.fetch_futures_basis(symbol)
         cvd = _fetcher.fetch_cvd(symbol)
         options_data = _fetcher.fetch_options_data(symbol)
+        liquidations = get_liq_summary(symbol)
 
         a = build_symbol_analysis(
             symbol,
@@ -97,6 +100,7 @@ def _run_cycle():
             basis=basis,
             cvd=cvd,
             options_data=options_data,
+            liquidations=liquidations,
         )
         analyses.append(a)
 
