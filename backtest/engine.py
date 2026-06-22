@@ -44,6 +44,42 @@ HYPE_SMALL_SAMPLE_THRESH = 30   # pod tímto počtem obchodů = varování
 
 # ── Precompute indicator series ───────────────────────────────────────────────
 
+POC_LOOKBACK = 300   # barů pro rolling Volume Profile (shoduje se s CANDLE_LIMIT v live)
+POC_BINS     = config.VOLUME_PROFILE_BINS
+
+
+def _rolling_poc(df: pd.DataFrame) -> pd.Series:
+    """
+    Rolling Point of Control: cenová hladina s nejvyšším objemem za posledních
+    POC_LOOKBACK barů. Používá numpy histogram na midpointu (H+L)/2 barů.
+    O(n) numpy volání, každé na POC_LOOKBACK prvcích → kauzální, no look-ahead.
+    """
+    n     = len(df)
+    high  = df["high"].to_numpy(dtype=float)
+    low   = df["low"].to_numpy(dtype=float)
+    vol   = df["volume"].to_numpy(dtype=float)
+    mid   = (high + low) / 2.0
+    poc   = np.full(n, np.nan)
+
+    for i in range(POC_LOOKBACK - 1, n):
+        start   = i - POC_LOOKBACK + 1
+        sl_mid  = mid[start : i + 1]
+        sl_vol  = vol[start : i + 1]
+        sl_high = high[start : i + 1]
+        sl_low  = low[start : i + 1]
+        p_min   = sl_low.min()
+        p_max   = sl_high.max()
+        if p_max <= p_min:
+            poc[i] = mid[i]
+            continue
+        counts, edges = np.histogram(sl_mid, bins=POC_BINS,
+                                     range=(p_min, p_max), weights=sl_vol)
+        b       = int(np.argmax(counts))
+        poc[i]  = (edges[b] + edges[b + 1]) / 2.0
+
+    return pd.Series(poc, index=df.index)
+
+
 def _precompute(df: pd.DataFrame) -> dict:
     """
     Předpočítá všechny indicator série pro celý DataFrame (O(n)).
@@ -89,12 +125,28 @@ def _precompute(df: pd.DataFrame) -> dict:
         ((close >= close.rolling(5).max()) & (rsi < rsi.rolling(5).max().shift(1)))
     )
 
+    # VWAP s denním resetem (UTC půlnoc) — stejná logika jako live systém
+    typical = (high + low + close) / 3.0
+    tp_vol  = typical * df["volume"]
+    if "timestamp" in df.columns:
+        day_key    = pd.to_datetime(df["timestamp"]).dt.normalize()
+        cum_tp_vol = tp_vol.groupby(day_key).cumsum()
+        cum_vol    = df["volume"].groupby(day_key).cumsum()
+        vwap       = (cum_tp_vol / cum_vol.replace(0.0, np.nan)).fillna(typical)
+    else:
+        vwap = (tp_vol.cumsum() / df["volume"].cumsum().replace(0.0, np.nan)).fillna(typical)
+
+    # Rolling Point of Control (Volume Profile POC)
+    poc = _rolling_poc(df)
+
     return {
         "tenkan": tenkan, "kijun": kijun,
         "senkou_a": senkou_a, "senkou_b": senkou_b,
         "rsi": rsi, "atr": atr,
         "swing_high": swing_high, "swing_low": swing_low,
         "divergence": divergence,
+        "vwap": vwap,
+        "poc":  poc,
     }
 
 
@@ -158,14 +210,49 @@ def _signal(
     return direction, float(trader_score)
 
 
+def _signal_confluence(
+    htf_trend: str,
+    stf_trend: str,
+    rsi_val: float,
+    close: float,
+    vwap: float,
+    poc: float,
+) -> str:
+    """
+    Varianta D — LONG/SHORT pouze při konfluenci všech 5 podmínek.
+
+    LONG:  HTF=BULLISH, STF=BULLISH, RSI ∈ [45,65], close > VWAP, close > POC
+    SHORT: HTF=BEARISH, STF=BEARISH, RSI ∈ [35,55], close < VWAP, close < POC
+
+    RSI pásma záměrně symetrická kolem 50:
+      LONG  45–65 = momentum ale ne přeextendovaný (bullish bias, ne extrém)
+      SHORT 35–55 = momentum ale ne přeextendovaný (bearish bias, ne extrém)
+    """
+    if pd.isna(vwap) or pd.isna(poc):
+        return "WAIT"
+
+    if (htf_trend == "BULLISH" and stf_trend == "BULLISH"
+            and 45.0 <= rsi_val <= 65.0
+            and close > vwap and close > poc):
+        return "LONG"
+
+    if (htf_trend == "BEARISH" and stf_trend == "BEARISH"
+            and 35.0 <= rsi_val <= 55.0
+            and close < vwap and close < poc):
+        return "SHORT"
+
+    return "WAIT"
+
+
 # ── Hlavní backtest smyčka ────────────────────────────────────────────────────
 
 def run_symbol_backtest(
     symbol: str,
     dfs: dict,               # {"1h": df, "4h": df | None, "1d": df | None}
     fees_pct: float = 0.0,
-    threshold: int = 45,     # min. long_pct/short_pct pro otevření obchodu
+    threshold: int = 45,     # min. long_pct/short_pct pro otevření obchodu (A/B/C)
     require_htf_confirm: bool = False,  # Varianta C: HTF musí souhlasit se směrem
+    signal_mode: str = "score",         # "score" (A/B/C) | "confluence" (D)
 ) -> dict:
     """
     Spustí backtest pro jeden symbol a vrátí:
@@ -305,11 +392,21 @@ def run_symbol_backtest(
         if pd.isna(rsi_val) or pd.isna(atr_val) or atr_val <= 0:
             continue
 
-        direction, trader_score = _signal(
-            htf_trend, stf_trend, rsi_val, div_val,
-            threshold=threshold,
-            require_htf_confirm=require_htf_confirm,
-        )
+        if signal_mode == "confluence":
+            vwap_i = float(pre_1h["vwap"].iloc[i])
+            poc_i  = float(pre_1h["poc"].iloc[i])
+            direction   = _signal_confluence(
+                htf_trend, stf_trend, rsi_val,
+                float(bar["close"]), vwap_i, poc_i,
+            )
+            trader_score = 80.0  # fixní skóre: všech 5 podmínek splněno = silný setup
+        else:
+            direction, trader_score = _signal(
+                htf_trend, stf_trend, rsi_val, div_val,
+                threshold=threshold,
+                require_htf_confirm=require_htf_confirm,
+            )
+
         if direction == "WAIT":
             continue
 
@@ -382,4 +479,5 @@ def run_symbol_backtest(
         "is_small_sample":      len(trades) < HYPE_SMALL_SAMPLE_THRESH,
         "threshold":            threshold,
         "require_htf_confirm":  require_htf_confirm,
+        "signal_mode":          signal_mode,
     }

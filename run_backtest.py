@@ -33,10 +33,11 @@ args = parser.parse_args()
 
 # ── Definice variant ──────────────────────────────────────────────────────────
 VARIANTS = [
-    {"label": "Baseline (≥45)", "threshold": 45, "require_htf_confirm": False},
-    {"label": "A (≥60)",        "threshold": 60, "require_htf_confirm": False},
-    {"label": "B (≥65)",        "threshold": 65, "require_htf_confirm": False},
-    {"label": "C (≥60+HTF)",    "threshold": 60, "require_htf_confirm": True},
+    {"label": "Baseline (≥45)", "threshold": 45, "require_htf_confirm": False, "signal_mode": "score"},
+    {"label": "A (≥60)",        "threshold": 60, "require_htf_confirm": False, "signal_mode": "score"},
+    {"label": "B (≥65)",        "threshold": 65, "require_htf_confirm": False, "signal_mode": "score"},
+    {"label": "C (≥60+HTF)",    "threshold": 60, "require_htf_confirm": True,  "signal_mode": "score"},
+    {"label": "D (konfluence)", "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence"},
 ]
 
 print("=" * 64)
@@ -79,12 +80,14 @@ for v in VARIANTS:
             symbol, dfs, fees_pct=0.0,
             threshold=v["threshold"],
             require_htf_confirm=v["require_htf_confirm"],
+            signal_mode=v["signal_mode"],
         )
         # fees = args.fees
         resf = run_symbol_backtest(
             symbol, dfs, fees_pct=args.fees,
             threshold=v["threshold"],
             require_htf_confirm=v["require_htf_confirm"],
+            signal_mode=v["signal_mode"],
         )
 
         if "error" in res0:
