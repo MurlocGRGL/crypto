@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 from data_fetcher import DataFetcher
-from indicators import analyze_timeframe, correlation_with_btc, time_based_levels
+from indicators import analyze_timeframe, correlation_with_btc
 from report_generator import build_symbol_analysis, _trend_from_ichimoku_text
 
 CSV_PATH       = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trading_log.csv")
@@ -95,11 +95,8 @@ def _fetch_all() -> tuple:
     raw = _fetcher.fetch_all(config.SYMBOLS, config.TIMEFRAMES, limit=config.CANDLE_LIMIT)
 
     analyzed = {}
-    tl_map   = {}
     for sym, tf_dict in raw.items():
         analyzed[sym] = {tf: analyze_timeframe(df) for tf, df in tf_dict.items()}
-        df_1h = tf_dict.get("1h")
-        tl_map[sym] = time_based_levels(df_1h) if df_1h is not None else {}
 
     btc_trend = None
     if "BTC/USDT" in analyzed:
@@ -131,7 +128,7 @@ def _fetch_all() -> tuple:
                 ls_long=ls_l,           ls_short=ls_s,
                 oi_history=oi_hist,     fear_greed=fear_greed,
                 basis=basis,            cvd=cvd,
-                options_data=options,   time_levels=tl_map.get(sym, {}),
+                options_data=options,   time_levels={},
             )
             analyses.append(a)
         except Exception as exc:
