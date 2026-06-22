@@ -384,13 +384,20 @@ def volatility_regime(df: pd.DataFrame, atr_period: int = 14,
     }
 
 
-def analyze_timeframe(df: pd.DataFrame) -> dict:
-    """Spočítá všechny indikátory pro jeden timeframe a vrátí shrnutí."""
+def analyze_timeframe(df: pd.DataFrame, exclude_last: bool = True) -> dict:
+    """
+    Spočítá všechny indikátory pro jeden timeframe a vrátí shrnutí.
+
+    exclude_last=True  (default, live): odřízne formující se svíčku (df.iloc[:-1]).
+    exclude_last=False (backtest):      všechny předané svíčky jsou uzavřené — nic neodřezávej.
+                                        Volající zajistí, že df neobsahuje budoucí data.
+    """
     if df is None or len(df) < config.ICHIMOKU_SENKOU_B + config.ICHIMOKU_KIJUN + 1:
         return None
-    # Vždy pracujeme na UZAVŘENÝCH svíčkách — poslední řádek je probíhající svíčka, vynecháme ji.
-    # Tím se eliminuje problikávání indikátorů uprostřed svíčky.
-    df = df.iloc[:-1].copy()
+    if exclude_last:
+        df = df.iloc[:-1].copy()
+    else:
+        df = df.copy()
 
     rsi_series = rsi(df)
     vwap_series = vwap(df)
