@@ -63,22 +63,31 @@ def compute_stats(trades: list, equity: list, fees_pct: float) -> dict:
 
 def compute_random_baseline(trades: list, n_sim: int = 1000, seed: int = 42) -> dict:
     """
-    Monte Carlo random baseline: flip každého pnl_r s pravděpodobností 0.5.
-    Vrátí medián výnosu a 5.–95. percentil jako interval.
+    Monte Carlo random baseline: flip každého obchodu s pravděpodobností 0.5.
+
+    Používá pnl_pct (% účtu, leverage-aware) pokud je k dispozici;
+    jinak fallback na pnl_r × RISK_PER_TRADE pro zpětnou kompatibilitu.
+    SL/TP jsou symetrické (ATR-based) → flip pnl je přesný, ne aproximace.
+    Vrátí medián výnosu a 5.–95. percentil distribuce.
     """
     if not trades:
         return {"n_trades": 0}
 
-    pnl_rs = np.array([t["pnl_r"] for t in trades], dtype=float)
-    rng    = np.random.default_rng(seed)
+    # pnl_vals v zlomku účtu (0.01 = 1 %)
+    if "pnl_pct" in trades[0]:
+        pnl_vals = np.array([t["pnl_pct"] / 100.0 for t in trades], dtype=float)
+    else:
+        pnl_vals = np.array([t["pnl_r"] for t in trades], dtype=float) * RISK_PER_TRADE
+
+    rng = np.random.default_rng(seed)
 
     sim_returns   = np.empty(n_sim)
     sim_win_rates = np.empty(n_sim)
 
     for k in range(n_sim):
-        signs     = rng.choice(np.array([-1.0, 1.0]), size=len(pnl_rs))
-        flipped   = pnl_rs * signs
-        eq        = float(np.prod(1.0 + flipped * RISK_PER_TRADE))
+        signs     = rng.choice(np.array([-1.0, 1.0]), size=len(pnl_vals))
+        flipped   = pnl_vals * signs
+        eq        = float(np.prod(1.0 + flipped))
         sim_returns[k]   = (eq - 1.0) * 100.0
         sim_win_rates[k] = float(np.mean(flipped > 0) * 100.0)
 

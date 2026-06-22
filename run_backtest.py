@@ -33,11 +33,15 @@ args = parser.parse_args()
 
 # ── Definice variant ──────────────────────────────────────────────────────────
 VARIANTS = [
-    {"label": "Baseline (≥45)", "threshold": 45, "require_htf_confirm": False, "signal_mode": "score"},
-    {"label": "A (≥60)",        "threshold": 60, "require_htf_confirm": False, "signal_mode": "score"},
-    {"label": "B (≥65)",        "threshold": 65, "require_htf_confirm": False, "signal_mode": "score"},
-    {"label": "C (≥60+HTF)",    "threshold": 60, "require_htf_confirm": True,  "signal_mode": "score"},
-    {"label": "D (konfluence)", "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence"},
+    # Score-based (A/B/C): leverage=1 pro srovnatelnost s předchozími výsledky
+    {"label": "Baseline (≥45)", "threshold": 45, "require_htf_confirm": False, "signal_mode": "score",      "leverage": 1.0},
+    {"label": "A (≥60)",        "threshold": 60, "require_htf_confirm": False, "signal_mode": "score",      "leverage": 1.0},
+    {"label": "B (≥65)",        "threshold": 65, "require_htf_confirm": False, "signal_mode": "score",      "leverage": 1.0},
+    {"label": "C (≥60+HTF)",    "threshold": 60, "require_htf_confirm": True,  "signal_mode": "score",      "leverage": 1.0},
+    # Confluence (D): testujeme 1×, 3×, 5× — stejný signál, jiný leverage
+    {"label": "D 1×",           "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence", "leverage": 1.0},
+    {"label": "D 3×",           "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence", "leverage": 3.0},
+    {"label": "D 5×",           "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence", "leverage": 5.0},
 ]
 
 print("=" * 64)
@@ -81,6 +85,7 @@ for v in VARIANTS:
             threshold=v["threshold"],
             require_htf_confirm=v["require_htf_confirm"],
             signal_mode=v["signal_mode"],
+            leverage=v["leverage"],
         )
         # fees = args.fees
         resf = run_symbol_backtest(
@@ -88,6 +93,7 @@ for v in VARIANTS:
             threshold=v["threshold"],
             require_htf_confirm=v["require_htf_confirm"],
             signal_mode=v["signal_mode"],
+            leverage=v["leverage"],
         )
 
         if "error" in res0:

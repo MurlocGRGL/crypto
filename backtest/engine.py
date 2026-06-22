@@ -41,6 +41,9 @@ SWING_WINDOW  = 20
 TRADE_TIMEOUT_BARS       = 48   # 2 dny na 1H
 HYPE_SMALL_SAMPLE_THRESH = 30   # pod tímto počtem obchodů = varování
 
+# Margin alokovaný na každý obchod (zlomek účtu) — základ pro P&L s pákou
+RISK_PER_TRADE = 0.01   # 1 % účtu jako margin per trade
+
 
 # ── Precompute indicator series ───────────────────────────────────────────────
 
@@ -248,11 +251,12 @@ def _signal_confluence(
 
 def run_symbol_backtest(
     symbol: str,
-    dfs: dict,               # {"1h": df, "4h": df | None, "1d": df | None}
+    dfs: dict,                    # {"1h": df, "4h": df | None, "1d": df | None}
     fees_pct: float = 0.0,
-    threshold: int = 45,     # min. long_pct/short_pct pro otevření obchodu (A/B/C)
+    threshold: int = 45,          # min. long_pct/short_pct pro otevření obchodu (A/B/C)
     require_htf_confirm: bool = False,  # Varianta C: HTF musí souhlasit se směrem
-    signal_mode: str = "score",         # "score" (A/B/C) | "confluence" (D)
+    signal_mode: str = "score",   # "score" (A/B/C) | "confluence" (D)
+    leverage: float = 1.0,        # pákový efekt — viz RISK_PER_TRADE pro model
 ) -> dict:
     """
     Spustí backtest pro jeden symbol a vrátí:
@@ -332,20 +336,29 @@ def run_symbol_backtest(
                 hit, hit_price = "TIMEOUT", float(bar["close"])
 
             if hit is not None:
-                sl_dist_pct = abs(entry - sl) / entry
-                fees_r = (2.0 * fees_pct / 100.0) / sl_dist_pct if sl_dist_pct > 1e-10 else 0.0
-                raw_r  = (
-                    (hit_price - entry) / abs(entry - sl) if side == "LONG"
-                    else (entry - hit_price) / abs(sl - entry)
+                sl_dist_pct = abs(entry - sl) / entry if abs(entry - sl) > 1e-10 else 1e-6
+                price_move  = (
+                    (hit_price - entry) / entry if side == "LONG"
+                    else (entry - hit_price) / entry
                 )
-                pnl_r = raw_r - fees_r
 
-                equity.append(equity[-1] * (1.0 + pnl_r * 0.01))   # 1 % risk/trade
+                # pnl_r — R-jednotky pro směrové statistiky (win rate, R:R)
+                pnl_r = price_move / sl_dist_pct
+
+                # Leverage-aware P&L dle uživatelova modelu:
+                #   pnl   = pohyb_ceny% × páka × margin (zlomek účtu)
+                #   fees  = margin × páka × fee_rate × 2 (round-trip)
+                pnl_pct  = price_move * leverage * RISK_PER_TRADE
+                fees_acc = 2.0 * leverage * RISK_PER_TRADE * (fees_pct / 100.0)
+                net_pct  = pnl_pct - fees_acc
+
+                equity.append(equity[-1] * (1.0 + net_pct))
                 ot.update({
                     "exit_bar":    i,
                     "exit_price":  round(hit_price, 8),
                     "exit_reason": hit,
                     "pnl_r":       round(pnl_r, 4),
+                    "pnl_pct":     round(net_pct * 100.0, 4),  # % účtu (leverage-aware)
                     "bars_held":   bars_held,
                     "win":         hit.startswith("TP"),
                 })
@@ -446,25 +459,28 @@ def run_symbol_backtest(
 
     # Otevřený obchod na konci dat → uzavři za close posledního baru
     if open_trade is not None:
-        last       = df_1h.iloc[-1]
-        entry      = open_trade["entry"]
-        sl         = open_trade["sl"]
-        hit_price  = float(last["close"])
-        sl_dist_pct = abs(entry - sl) / entry
-        fees_r     = (2.0 * fees_pct / 100.0) / sl_dist_pct if sl_dist_pct > 1e-10 else 0.0
-        raw_r      = (
-            (hit_price - entry) / abs(entry - sl) if open_trade["side"] == "LONG"
-            else (entry - hit_price) / abs(sl - entry)
+        last        = df_1h.iloc[-1]
+        entry       = open_trade["entry"]
+        sl          = open_trade["sl"]
+        hit_price   = float(last["close"])
+        sl_dist_pct = abs(entry - sl) / entry if abs(entry - sl) > 1e-10 else 1e-6
+        price_move  = (
+            (hit_price - entry) / entry if open_trade["side"] == "LONG"
+            else (entry - hit_price) / entry
         )
-        pnl_r = raw_r - fees_r
-        equity.append(equity[-1] * (1.0 + pnl_r * 0.01))
+        pnl_r    = price_move / sl_dist_pct
+        pnl_pct  = price_move * leverage * RISK_PER_TRADE
+        fees_acc = 2.0 * leverage * RISK_PER_TRADE * (fees_pct / 100.0)
+        net_pct  = pnl_pct - fees_acc
+        equity.append(equity[-1] * (1.0 + net_pct))
         open_trade.update({
-            "exit_bar": n - 1,
-            "exit_price": round(hit_price, 8),
+            "exit_bar":    n - 1,
+            "exit_price":  round(hit_price, 8),
             "exit_reason": "EOD",
-            "pnl_r": round(pnl_r, 4),
-            "bars_held": n - 1 - open_trade["entry_bar"],
-            "win": False,
+            "pnl_r":       round(pnl_r, 4),
+            "pnl_pct":     round(net_pct * 100.0, 4),
+            "bars_held":   n - 1 - open_trade["entry_bar"],
+            "win":         False,
         })
         trades.append(open_trade)
 
@@ -480,4 +496,5 @@ def run_symbol_backtest(
         "threshold":            threshold,
         "require_htf_confirm":  require_htf_confirm,
         "signal_mode":          signal_mode,
+        "leverage":             leverage,
     }
