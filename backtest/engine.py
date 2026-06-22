@@ -110,11 +110,21 @@ def _ichimoku_trend(close_val: float, sa: float, sb: float) -> str:
     return "NEUTRÁLNÍ"
 
 
-def _signal(htf_trend: str, stf_trend: str, rsi_val: float,
-            divergence: bool) -> tuple[str, float]:
+def _signal(
+    htf_trend: str,
+    stf_trend: str,
+    rsi_val: float,
+    divergence: bool,
+    threshold: int = 45,
+    require_htf_confirm: bool = False,
+) -> tuple[str, float]:
     """
     Identická logika jako build_symbol_analysis v report_generator.py.
     Funding rate vynecháno (historicky nedostupné).
+
+    threshold           — min. long_pct/short_pct pro LONG/SHORT signál (default 45 = live chování)
+    require_htf_confirm — Varianta C: LONG jen při BULLISH HTF, SHORT jen při BEARISH HTF
+
     Vrátí (direction, trader_score).
     """
     score_map = {"BULLISH": 1, "BEARISH": -1, "NEUTRÁLNÍ": 0, "N/A": 0}
@@ -130,12 +140,19 @@ def _signal(htf_trend: str, stf_trend: str, rsi_val: float,
         round(x * 100 / total) for x in (long_pct, short_pct, wait_pct)
     )
 
-    if long_pct >= short_pct and long_pct >= wait_pct and long_pct >= 45:
+    if long_pct >= short_pct and long_pct >= wait_pct and long_pct >= threshold:
         direction = "LONG"
-    elif short_pct >= long_pct and short_pct >= wait_pct and short_pct >= 45:
+    elif short_pct >= long_pct and short_pct >= wait_pct and short_pct >= threshold:
         direction = "SHORT"
     else:
         direction = "WAIT"
+
+    # Varianta C: vyfiltruj counter-trend obchody
+    if require_htf_confirm and direction != "WAIT":
+        if direction == "LONG"  and htf_trend != "BULLISH":
+            direction = "WAIT"
+        elif direction == "SHORT" and htf_trend != "BEARISH":
+            direction = "WAIT"
 
     trader_score = max(0, min(100, round(50 + score * 10 + (10 if divergence else 0))))
     return direction, float(trader_score)
@@ -145,8 +162,10 @@ def _signal(htf_trend: str, stf_trend: str, rsi_val: float,
 
 def run_symbol_backtest(
     symbol: str,
-    dfs: dict,          # {"1h": df, "4h": df | None, "1d": df | None}
+    dfs: dict,               # {"1h": df, "4h": df | None, "1d": df | None}
     fees_pct: float = 0.0,
+    threshold: int = 45,     # min. long_pct/short_pct pro otevření obchodu
+    require_htf_confirm: bool = False,  # Varianta C: HTF musí souhlasit se směrem
 ) -> dict:
     """
     Spustí backtest pro jeden symbol a vrátí:
@@ -286,7 +305,11 @@ def run_symbol_backtest(
         if pd.isna(rsi_val) or pd.isna(atr_val) or atr_val <= 0:
             continue
 
-        direction, trader_score = _signal(htf_trend, stf_trend, rsi_val, div_val)
+        direction, trader_score = _signal(
+            htf_trend, stf_trend, rsi_val, div_val,
+            threshold=threshold,
+            require_htf_confirm=require_htf_confirm,
+        )
         if direction == "WAIT":
             continue
 
@@ -349,12 +372,14 @@ def run_symbol_backtest(
         trades.append(open_trade)
 
     return {
-        "symbol":        symbol,
-        "trades":        trades,
-        "equity":        equity,
-        "n_bars":        n,
-        "n_signals":     n_signals,
-        "period_start":  str(df_1h.iloc[MIN_BARS]["timestamp"]),
-        "period_end":    str(df_1h.iloc[-1]["timestamp"]),
-        "is_small_sample": len(trades) < HYPE_SMALL_SAMPLE_THRESH,
+        "symbol":               symbol,
+        "trades":               trades,
+        "equity":               equity,
+        "n_bars":               n,
+        "n_signals":            n_signals,
+        "period_start":         str(df_1h.iloc[MIN_BARS]["timestamp"]),
+        "period_end":           str(df_1h.iloc[-1]["timestamp"]),
+        "is_small_sample":      len(trades) < HYPE_SMALL_SAMPLE_THRESH,
+        "threshold":            threshold,
+        "require_htf_confirm":  require_htf_confirm,
     }

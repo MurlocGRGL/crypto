@@ -111,6 +111,138 @@ def _symbol_section(symbol: str, data: dict) -> str:
     )
 
 
+def render_comparison_report(
+    variants: list[dict],          # [{"label": str, "results": {symbol: data}}, ...]
+    buy_hold: dict,                # {symbol: {"return_pct": float, ...}}
+) -> str:
+    """
+    Srovnávací report: všechny varianty prahu side-by-side pro každý symbol.
+    variants = [{"label": "Baseline (≥45)", "results": {...}}, ...]
+    """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    symbols = list(variants[0]["results"].keys()) if variants else []
+    v_labels = [v["label"] for v in variants]
+
+    # ── Metodika ──────────────────────────────────────────────────────────────
+    header = (
+        f"# Backtest — Srovnání variant signálového prahu\n"
+        f"Vygenerováno: {now}\n\n"
+        f"## Testované varianty\n\n"
+        f"| Varianta | Popis |\n"
+        f"|---|---|\n"
+        f"| Baseline | long_pct / short_pct ≥ 45 (stávající live chování) |\n"
+        f"| A | long_pct / short_pct ≥ 60 |\n"
+        f"| B | long_pct / short_pct ≥ 65 |\n"
+        f"| C | long_pct / short_pct ≥ 60 AND HTF trend souhlasí se směrem |\n\n"
+        f"**SL/TP:** {ATR_SL_MULT}× ATR (1:1 R:R)  |  "
+        f"**Entry:** open příšti svíčky (no look-ahead)  |  "
+        f"**Fees sloupec:** 0.04 % taker round-trip\n\n"
+        f"---\n\n"
+    )
+
+    # ── Per-symbol tabulky ────────────────────────────────────────────────────
+    sections = []
+    for symbol in symbols:
+        sym = symbol.replace("/USDT", "")
+        bh_ret = buy_hold.get(symbol, {}).get("return_pct")
+        bh_str = _pct(bh_ret) if bh_ret is not None else "N/A"
+
+        # Zjisti periodu z první varianty
+        first_data = variants[0]["results"].get(symbol, {})
+        period = (
+            f"{first_data.get('period_start','?')[:10]} → "
+            f"{first_data.get('period_end','?')[:10]}"
+        )
+
+        # Sestavíme tabulku řádků × variant
+        col_w = 14
+        sep_col = "|" + "|".join(["-"*(col_w+2)] * (len(v_labels)+1)) + "|\n"
+
+        def hdr_row(label):
+            cells = [f" {label:<22} "] + [f" {lbl:^{col_w}} " for lbl in v_labels]
+            return "|" + "|".join(cells) + "|\n"
+
+        def data_row(label, values):
+            cells = [f" {label:<22} "] + [f" {v:^{col_w}} " for v in values]
+            return "|" + "|".join(cells) + "|\n"
+
+        tbl  = hdr_row("Metrika")
+        tbl += sep_col
+
+        def get(v_idx, key, subkey=None):
+            d = variants[v_idx]["results"].get(symbol, {})
+            if "error" in d:
+                return "ERR"
+            if subkey:
+                return d.get(key, {}).get(subkey, "?")
+            return d.get(key, "?")
+
+        def s0(v_idx, key):
+            d = variants[v_idx]["results"].get(symbol, {})
+            if "error" in d:
+                return "ERR"
+            return d.get("stats_no_fees", {}).get(key, "?")
+
+        def sf(v_idx, key):
+            d = variants[v_idx]["results"].get(symbol, {})
+            if "error" in d:
+                return "ERR"
+            return d.get("stats_with_fees", {}).get(key, "?")
+
+        tbl += data_row("Počet obchodů",  [str(s0(i, "n_trades"))   for i in range(len(variants))])
+        tbl += data_row("Win rate",       [f"{s0(i,'win_rate')} %"  for i in range(len(variants))])
+        tbl += data_row("Expectancy",     [_r(s0(i,"expectancy_r")) for i in range(len(variants))])
+        tbl += data_row("Výnos fees=0",   [_pct(s0(i,"total_return_pct")) for i in range(len(variants))])
+        tbl += data_row("Výnos fees=0.04%", [_pct(sf(i,"total_return_pct")) for i in range(len(variants))])
+        tbl += data_row("Max drawdown",   [_pct(s0(i,"max_dd_pct")) for i in range(len(variants))])
+        tbl += data_row("Avg R:R",        [str(s0(i,"avg_rr"))      for i in range(len(variants))])
+        tbl += data_row(f"Buy&Hold ({bh_str})",
+                        [bh_str] + ["(stejné)" for _ in range(len(variants)-1)])
+
+        # HYPE small-sample flag
+        small_warns = []
+        for i, v in enumerate(variants):
+            d = v["results"].get(symbol, {})
+            if d.get("is_small_sample"):
+                small_warns.append(f"{v['label']}: {d.get('stats_no_fees',{}).get('n_trades','?')} obchodů")
+
+        small_note = ""
+        if small_warns:
+            small_note = f"\n> ⚠️  **MALÝ VZOREK** ({sym}) — {'; '.join(small_warns)}\n"
+
+        sections.append(f"### {sym} — {period}\n{small_note}\n{tbl}")
+
+    # ── Souhrnná tabulka napříč symboly (výnos s fees=0.04%) ─────────────────
+    summary_rows = []
+    for symbol in symbols:
+        sym = symbol.replace("/USDT", "")
+        row_vals = []
+        for i in range(len(variants)):
+            d = variants[i]["results"].get(symbol, {})
+            if "error" in d:
+                row_vals.append("ERR")
+            else:
+                val = d.get("stats_with_fees", {}).get("total_return_pct")
+                row_vals.append(_pct(val))
+        bh_ret = buy_hold.get(symbol, {}).get("return_pct")
+        row_vals.append(_pct(bh_ret))
+        summary_rows.append((sym, row_vals))
+
+    sum_hdr = "| Symbol | " + " | ".join(v_labels) + " | Buy&Hold |\n"
+    sum_sep = "|---|" + "---|" * (len(v_labels) + 1) + "\n"
+    sum_body = ""
+    for sym, vals in summary_rows:
+        sum_body += f"| {sym} | " + " | ".join(vals) + " |\n"
+
+    summary = (
+        f"## Souhrnná tabulka — výnos s fees=0.04 % (1 % risk/trade)\n\n"
+        f"{sum_hdr}{sum_sep}{sum_body}\n"
+    )
+
+    return header + summary + "---\n\n## Detail po symbolech\n\n" + "\n\n---\n\n".join(sections)
+
+
 def render_report(all_results: dict) -> str:
     now      = datetime.now().strftime("%Y-%m-%d %H:%M")
     sections = [_symbol_section(sym, data) for sym, data in all_results.items()]
