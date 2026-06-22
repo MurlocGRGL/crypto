@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
-CLI spouštěč backtestingu — testuje více variant signálového prahu najednou.
+CLI spouštěč backtestingu — srovnání E2 vs G.
 
 Varianty:
-  Baseline  long_pct/short_pct >= 45  (stávající live chování)
-  A         long_pct/short_pct >= 60
-  B         long_pct/short_pct >= 65
-  C         long_pct/short_pct >= 60 AND HTF trend souhlasí se směrem
+  E2  Konfluence (8 binarnich podminek), RSI LONG [40-70] / SHORT [30-60]
+      Vstup: open nasledujici svicky po signalu
+  H   E2 + 9. podminka (Weekly Open bias) + vstup na time-based level:
+        - 9. podminka: close > Weekly Open povoli LONG, close < Weekly Open povoli SHORT
+        - Vstup: limit order na nearest support (VAL/Wkly Open/Mon Low/Monthly Open)
+                 nebo nearest resistance (VAH/Wkly High/Mon High/Prev Wk High)
+        - Timeout: limit expiruje po 24 barech, pokud cena nedosahne urovne
+        - SL/TP: standardni 1.5xATR od entry
 
-Použití:
+Kazda varianta testovana s pakou 3x a 5x.
+
+Pouziti:
   python run_backtest.py
-  python run_backtest.py --symbols BTC/USDT ETH/USDT
+  python run_backtest.py --symbols BTC/USDT SOL/USDT ETH/USDT HYPE/USDT
   python run_backtest.py --years 1
   python run_backtest.py --output result.md
   python run_backtest.py --no-cache
@@ -23,7 +29,7 @@ from pathlib import Path
 # ── CLI ────────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="Crypto Analyzer — Backtest (multi-variant)")
 parser.add_argument("--symbols", nargs="+",
-                    default=["BTC/USDT", "ETH/USDT", "SOL/USDT", "HYPE/USDT"])
+                    default=["BTC/USDT", "SOL/USDT"])
 parser.add_argument("--years",   type=int, default=3)
 parser.add_argument("--output",  default="backtest_report.md")
 parser.add_argument("--no-cache", action="store_true")
@@ -32,20 +38,22 @@ parser.add_argument("--fees",    type=float, default=0.04,
 args = parser.parse_args()
 
 # ── Definice variant ──────────────────────────────────────────────────────────
+_E2 = {"signal_mode": "confluence_e", "rsi_lo": 40.0, "rsi_hi": 70.0,
+       "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
+_H  = {"signal_mode": "variant_h",    "rsi_lo": 40.0, "rsi_hi": 70.0,
+       "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
+
 VARIANTS = [
-    # Score-based (A/B/C): leverage=1 pro srovnatelnost s předchozími výsledky
-    {"label": "Baseline (≥45)", "threshold": 45, "require_htf_confirm": False, "signal_mode": "score",      "leverage": 1.0},
-    {"label": "A (≥60)",        "threshold": 60, "require_htf_confirm": False, "signal_mode": "score",      "leverage": 1.0},
-    {"label": "B (≥65)",        "threshold": 65, "require_htf_confirm": False, "signal_mode": "score",      "leverage": 1.0},
-    {"label": "C (≥60+HTF)",    "threshold": 60, "require_htf_confirm": True,  "signal_mode": "score",      "leverage": 1.0},
-    # Confluence (D): testujeme 1×, 3×, 5× — stejný signál, jiný leverage
-    {"label": "D 1×",           "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence", "leverage": 1.0},
-    {"label": "D 3×",           "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence", "leverage": 3.0},
-    {"label": "D 5×",           "threshold": 45, "require_htf_confirm": False, "signal_mode": "confluence", "leverage": 5.0},
+    # E2 (baseline): 8 podminek, vstup na dalsi open
+    {**_E2, "label": "E2 3x", "leverage": 3.0},
+    {**_E2, "label": "E2 5x", "leverage": 5.0},
+    # H: E2 + Weekly Open jako 9. podminka + limit vstup na time-based level
+    {**_H,  "label": "H  3x", "leverage": 3.0},
+    {**_H,  "label": "H  5x", "leverage": 5.0},
 ]
 
 print("=" * 64)
-print("  Crypto Analyzer — Backtest (Baseline + Varianty A, B, C)")
+print("  Crypto Analyzer -- Backtest E2 vs H (Weekly Open + time levels)")
 print("=" * 64)
 
 # ── Imports ────────────────────────────────────────────────────────────────────
@@ -66,7 +74,7 @@ all_data = load_all(args.symbols, ["1h", "4h", "1d"], years=args.years)
 print()
 
 # ── [2/3] Backtest všech variant ──────────────────────────────────────────────
-print(f"[2/3] Spouštím backtest ({len(VARIANTS)} varianty × {len(args.symbols)} symboly)...")
+print(f"[2/3] Spouštím backtest ({len(VARIANTS)} variant × {len(args.symbols)} symboly)...")
 
 # variant_results[i] = {"label": str, "results": {symbol: data_dict}}
 variant_results: list[dict] = []
@@ -79,6 +87,9 @@ for v in VARIANTS:
     for symbol in args.symbols:
         dfs = all_data.get(symbol, {})
 
+        rsi_lo  = v.get("rsi_lo", 45.0)
+        rsi_hi  = v.get("rsi_hi", 65.0)
+        s_thr   = v.get("score_threshold", 65.0)
         # fees = 0
         res0 = run_symbol_backtest(
             symbol, dfs, fees_pct=0.0,
@@ -86,6 +97,8 @@ for v in VARIANTS:
             require_htf_confirm=v["require_htf_confirm"],
             signal_mode=v["signal_mode"],
             leverage=v["leverage"],
+            rsi_lo=rsi_lo, rsi_hi=rsi_hi,
+            score_threshold=s_thr,
         )
         # fees = args.fees
         resf = run_symbol_backtest(
@@ -94,6 +107,8 @@ for v in VARIANTS:
             require_htf_confirm=v["require_htf_confirm"],
             signal_mode=v["signal_mode"],
             leverage=v["leverage"],
+            rsi_lo=rsi_lo, rsi_hi=rsi_hi,
+            score_threshold=s_thr,
         )
 
         if "error" in res0:
@@ -128,7 +143,7 @@ for v in VARIANTS:
     variant_results.append({"label": v["label"], "results": v_res})
 
 # ── [3/3] Report ───────────────────────────────────────────────────────────────
-print(f"\n[3/3] Generuji srovnávací report → {args.output}...")
+print(f"\n[3/3] Generuji srovnavaci report -> {args.output}...")
 report = render_comparison_report(variant_results, buy_hold)
 Path(args.output).write_text(report, encoding="utf-8")
 print(f"Hotovo! Report: {Path(args.output).resolve()}")

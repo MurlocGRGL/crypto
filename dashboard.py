@@ -11,7 +11,9 @@ Architektura aktualizací:
   - Stránka si data tahá každých 15s přes /api/data
 """
 
+import base64
 import math
+import os
 import time
 import threading
 import traceback
@@ -22,13 +24,11 @@ from flask import Flask, jsonify, render_template, request
 import config
 from data_fetcher import DataFetcher
 import pandas as pd
-from indicators import analyze_timeframe, correlation_with_btc
-from liquidation_collector import start_collector, get_liq_summary
+from indicators import analyze_timeframe, correlation_with_btc, time_based_levels
 from report_generator import build_symbol_analysis, _trend_from_ichimoku_text
 import portfolio as pf
 
 app = Flask(__name__)
-start_collector()   # WebSocket stream !forceOrder@arr, ukládá do liquidations.db
 pf.init_db()        # portfolio.db — pozice + deník
 
 _lock = threading.Lock()
@@ -91,8 +91,11 @@ def _run_full_analysis() -> list:
     raw_data = _fetcher.fetch_all(config.SYMBOLS, config.TIMEFRAMES, limit=config.CANDLE_LIMIT)
 
     analyzed = {}
+    time_levels_map = {}
     for symbol, tf_dict in raw_data.items():
         analyzed[symbol] = {tf: analyze_timeframe(df) for tf, df in tf_dict.items()}
+        df_1h_sym = tf_dict.get("1h")
+        time_levels_map[symbol] = time_based_levels(df_1h_sym) if df_1h_sym is not None else {}
 
     btc_trend = None
     btc_df_1h = raw_data.get("BTC/USDT", {}).get("1h")
@@ -115,7 +118,6 @@ def _run_full_analysis() -> list:
         basis = _fetcher.fetch_futures_basis(symbol)
         cvd = _fetcher.fetch_cvd(symbol)
         options_data = _fetcher.fetch_options_data(symbol)
-        liquidations = get_liq_summary(symbol)
 
         a = build_symbol_analysis(
             symbol,
@@ -131,7 +133,7 @@ def _run_full_analysis() -> list:
             basis=basis,
             cvd=cvd,
             options_data=options_data,
-            liquidations=liquidations,
+            time_levels=time_levels_map.get(symbol, {}),
         )
         analyses.append(a)
 
@@ -313,6 +315,26 @@ def api_update_journal(entry_id):
         if k in ("action", "result", "notes", "pnl_usdt")
     })
     return jsonify({"ok": ok})
+
+
+@app.route("/api/screenshot", methods=["POST"])
+def api_screenshot():
+    d = request.json or {}
+    img_data = d.get("image", "")
+    filename  = d.get("filename", "screenshot.png")
+    filename  = "".join(c for c in filename if c.isalnum() or c in "._-")
+    if not filename.endswith(".png"):
+        filename += ".png"
+    try:
+        _, b64 = img_data.split(",", 1)
+        img_bytes = base64.b64decode(b64)
+        folder = os.path.join(os.path.dirname(__file__), "screenshots")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, filename), "wb") as f:
+            f.write(img_bytes)
+        return jsonify({"ok": True, "filename": filename})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 
 if __name__ == "__main__":

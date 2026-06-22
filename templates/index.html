@@ -26,7 +26,7 @@
       background: var(--bg);
       color: var(--text);
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.5;
       min-height: 100vh;
     }
@@ -35,7 +35,7 @@
     header {
       background: var(--card);
       border-bottom: 1px solid var(--border);
-      padding: 10px 20px;
+      padding: 13px 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -44,18 +44,18 @@
       z-index: 100;
     }
 
-    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    header h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
 
     #status-bar {
       display: flex;
       align-items: center;
-      gap: 14px;
-      font-size: 12px;
+      gap: 20px;
+      font-size: 14px;
       color: var(--sub);
     }
 
     .dot {
-      width: 8px; height: 8px;
+      width: 11px; height: 11px;
       border-radius: 50%;
       background: var(--sub);
       flex-shrink: 0;
@@ -71,7 +71,7 @@
       background: var(--card);
       border-bottom: 1px solid var(--border);
       display: flex;
-      padding: 0 16px;
+      padding: 0 28px;
       gap: 2px;
       overflow-x: auto;
     }
@@ -82,9 +82,9 @@
       border-bottom: 2px solid transparent;
       color: var(--sub);
       cursor: pointer;
-      font-size: 13px;
+      font-size: 16px;
       font-weight: 500;
-      padding: 9px 16px;
+      padding: 13px 24px;
       white-space: nowrap;
       transition: color .15s, border-color .15s;
     }
@@ -93,9 +93,9 @@
 
     /* ── Main layout ─────────────────────────────────────── */
     main {
-      max-width: 1080px;
+      max-width: 3200px;
       margin: 0 auto;
-      padding: 18px 16px 40px;
+      padding: 24px 32px 60px;
     }
 
     /* ── Loading / Error states ──────────────────────────── */
@@ -130,11 +130,11 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 22px 26px;
     }
 
     .card-title {
-      font-size: 10px;
+      font-size: 14px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .07em;
@@ -146,9 +146,10 @@
     .card.short-side { border-left: 3px solid var(--red);   background: var(--red-bg);   }
 
     /* ── Grids ───────────────────────────────────────────── */
-    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-    .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-    @media (max-width: 680px) { .g2, .g3 { grid-template-columns: 1fr; } }
+    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+    .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+    @media (max-width: 1400px) { .g3 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 680px)  { .g2, .g3 { grid-template-columns: 1fr; } }
 
     .mb { margin-bottom: 14px; }
 
@@ -157,16 +158,16 @@
       display: flex;
       align-items: baseline;
       flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 16px;
+      margin-bottom: 22px;
     }
-    .coin-name  { font-size: 22px; font-weight: 700; }
-    .coin-price { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .coin-name  { font-size: 36px; font-weight: 700; }
+    .coin-price { font-size: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
     .badge {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
-      padding: 3px 11px;
+      padding: 4px 13px;
       border-radius: 4px;
       border: 2px solid;
       letter-spacing: .03em;
@@ -183,21 +184,21 @@
       justify-content: space-between;
       align-items: baseline;
       gap: 8px;
-      padding: 4px 0;
+      padding: 9px 0;
       border-bottom: 1px solid var(--border);
-      font-size: 12.5px;
+      font-size: 16px;
     }
     .row:last-child { border-bottom: none; }
-    .row-label { color: var(--sub); white-space: nowrap; }
+    .row-label { color: var(--sub); white-space: nowrap; font-size: 14px; }
     .row-val   { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 
     /* ── Trade level rows ────────────────────────────────── */
     .trade-row {
       display: flex;
       justify-content: space-between;
-      padding: 4px 0;
+      padding: 9px 0;
       border-bottom: 1px solid rgba(48,54,61,.6);
-      font-size: 12.5px;
+      font-size: 17px;
     }
     .trade-row:last-child { border-bottom: none; }
     .t-label { color: var(--sub); }
@@ -210,7 +211,7 @@
     .prob-wrap { display: flex; gap: 10px; }
     .prob-item { flex: 1; }
     .prob-label {
-      font-size: 11px; color: var(--sub);
+      font-size: 14px; color: var(--sub);
       display: flex; justify-content: space-between;
       margin-bottom: 4px;
     }
@@ -330,6 +331,95 @@
     .neut { color: var(--yellow);}
     .dim  { color: var(--sub);   }
 
+    /* ── E2 scenario highlighting ───────────────────────── */
+    .card.e2-confirmed {
+      box-shadow: 0 0 0 2px currentColor;
+    }
+    .card.e2-confirmed.long-side  { box-shadow: 0 0 0 2px var(--green); }
+    .card.e2-confirmed.short-side { box-shadow: 0 0 0 2px var(--red); }
+    .card.e2-inactive {
+      opacity: 0.38;
+      filter: saturate(0.3);
+      pointer-events: none;
+    }
+    .e2-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      padding: 2px 7px;
+      border-radius: 3px;
+      margin-left: 6px;
+      background: rgba(63,185,80,.18);
+      color: var(--green);
+      border: 1px solid rgba(63,185,80,.35);
+    }
+
+    /* ── Time-Based Price Levels ─────────────────────────── */
+    .price-ladder { display: flex; flex-direction: column; gap: 0; font-size: 13px; }
+    .pl-row {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 6px;
+      border-left: 3px solid transparent;
+      border-bottom: 1px solid var(--border);
+    }
+    .pl-row:last-child { border-bottom: none; }
+    .pl-label { flex: 1; color: var(--sub); white-space: nowrap; }
+    .pl-price { font-family: var(--mono); width: 86px; text-align: right; }
+    .pl-dist  { font-family: var(--mono); width: 52px; text-align: right; font-size: 10px; color: var(--sub); }
+    .pl-res   { border-left-color: var(--red); }
+    .pl-res .pl-price { color: var(--red); }
+    .pl-sup   { border-left-color: var(--green); }
+    .pl-sup .pl-price { color: var(--green); }
+    .pl-week  { border-left-color: #58a6ff; }
+    .pl-week .pl-price { color: #58a6ff; }
+    .pl-month { border-left-color: #bc8cff; }
+    .pl-month .pl-price { color: #bc8cff; }
+    .pl-current {
+      background: rgba(255,255,255,0.07);
+      border-left-color: var(--fg) !important;
+      border-bottom: 2px solid var(--border);
+    }
+    .pl-current .pl-label, .pl-current .pl-price { color: var(--fg); font-weight: 700; }
+
+    /* ── Screenshot button & toast ──────────────────────── */
+    .screenshot-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--sub);
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 6px 9px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      transition: color .15s, border-color .15s;
+    }
+    .screenshot-btn:hover { color: var(--text); border-color: var(--sub); }
+    .screenshot-btn:disabled { opacity: .35; cursor: wait; }
+
+    #screenshot-toast {
+      position: fixed;
+      bottom: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 24px;
+      border-radius: 7px;
+      font-size: 14px;
+      font-weight: 500;
+      transition: bottom .25s ease;
+      z-index: 9999;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    }
+    #screenshot-toast.toast-show { bottom: 28px; }
+
     /* ── Disclaimer ──────────────────────────────────────── */
     .disclaimer {
       font-size: 11px;
@@ -351,6 +441,12 @@
     <span id="lupd">Načítám...</span>
     <span class="dim" style="font-size:11px">Cena: <b id="cdwn-price" style="color:var(--text)">—</b></span>
     <span class="dim" style="font-size:11px">Analýza (15m): <b id="cdwn-analysis" style="color:var(--text)">—</b></span>
+    <button class="screenshot-btn" id="screenshot-btn" onclick="takeScreenshot()" title="Uložit screenshot">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -373,6 +469,7 @@
   </div>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 // ── State ──────────────────────────────────────────────────
 let data = null;
@@ -473,6 +570,113 @@ function renderSentiment(a) {
   return h;
 }
 
+// ── E2 Signal (paper trading) ──────────────────────────────
+function renderE2Signal(a) {
+  const sig = a.e2_signal || 'WAIT';
+  const cl  = sig === 'LONG' ? 'long' : sig === 'SHORT' ? 'short' : 'wait';
+  const bcl = sig === 'LONG' ? 'long-side' : sig === 'SHORT' ? 'short-side' : '';
+
+  const cl2 = a.e2_checklist || {};
+  const rows = Object.entries(cl2).map(([label, ok]) =>
+    `<div class="row">
+       <span class="row-label">${ok ? '✅' : '❌'} ${label}</span>
+       <span class="row-val ${ok ? 'bull' : 'bear dim'}" style="font-size:11px">${ok ? 'splněno' : 'nesplněno'}</span>
+     </div>`
+  ).join('');
+
+  const metCount = Object.values(cl2).filter(Boolean).length;
+  const total    = Object.keys(cl2).length;
+
+  return `
+    <div class="card ${bcl}" style="border-left-width:3px">
+      <div class="card-title" style="display:flex;align-items:center;gap:10px">
+        E2 Signal (paper trading — RSI&nbsp;40–70)
+        <span class="badge ${cl}" style="font-size:11px;padding:2px 9px">${sig}</span>
+        <span class="dim" style="font-size:11px;font-weight:400;margin-left:auto">${metCount}/${total} podmínek</span>
+      </div>
+      ${rows}
+      <div style="font-size:10.5px;color:var(--sub);margin-top:7px;line-height:1.5">
+        E2: HTF+STF trend, RSI 40–70, cena &gt; VWAP &amp; POC, Volatility TRENDING, BOS ve směru, bez divergence, cena nad/pod Weekly Open.
+        Signál je automaticky logován do Deníku.
+      </div>
+    </div>`;
+}
+
+// ── Time-Based Price Levels ─────────────────────────────────
+function renderTimeLevels(a) {
+  const tl = a.time_levels;
+  if (!tl || Object.keys(tl).length === 0) return '';
+  const price = a.last_price;
+
+  const fmtP = v => {
+    if (v == null) return '–';
+    if (v >= 10000) return v.toLocaleString('en', {maximumFractionDigits: 0});
+    if (v >= 100)   return v.toLocaleString('en', {maximumFractionDigits: 1});
+    return v.toPrecision(5);
+  };
+  const fmtD = v => {
+    if (v == null) return '';
+    const pct = ((v - price) / price * 100);
+    return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+  };
+
+  // Define levels with display metadata
+  const defs = [
+    { key: 'prev_month_high', label: 'Prev Month High', cls: 'pl-res' },
+    { key: 'prev_week_high',  label: 'Prev Week High',  cls: 'pl-res' },
+    { key: 'weekly_high',     label: 'Weekly High',     cls: 'pl-week' },
+    { key: 'monday_high',     label: 'Monday High',     cls: 'pl-week' },
+    { key: 'weekly_open',     label: 'Weekly Open',     cls: 'pl-month' },
+    { key: 'monday_open',     label: 'Monday Open',     cls: 'pl-month' },
+    { key: 'monthly_open',    label: 'Monthly Open',    cls: 'pl-month' },
+    { key: 'monday_low',      label: 'Monday Low',      cls: 'pl-week' },
+    { key: 'weekly_low',      label: 'Weekly Low',      cls: 'pl-week' },
+    { key: 'prev_week_low',   label: 'Prev Week Low',   cls: 'pl-sup' },
+  ];
+
+  // Build sorted list (highest price first), inserting current price marker
+  const items = defs
+    .filter(d => tl[d.key] != null)
+    .map(d => ({ ...d, val: tl[d.key] }))
+    .sort((a, b) => b.val - a.val);
+
+  let rows = '';
+  let inserted = false;
+  for (const item of items) {
+    if (!inserted && item.val < price) {
+      rows += `<div class="pl-row pl-current">
+        <span class="pl-label">▶ Current price</span>
+        <span class="pl-price">${fmtP(price)}</span>
+        <span class="pl-dist"></span>
+      </div>`;
+      inserted = true;
+    }
+    // Override class: if level is above price it's resistance, below it's support
+    // (Weekly/Monday Open is neutral — keep its class)
+    let cls = item.cls;
+    if (item.key === 'weekly_open' || item.key === 'monday_open' || item.key === 'monthly_open') {
+      cls = item.val > price ? 'pl-res' : 'pl-sup';  // flip based on position
+    }
+    rows += `<div class="pl-row ${cls}">
+      <span class="pl-label">${item.label}</span>
+      <span class="pl-price">${fmtP(item.val)}</span>
+      <span class="pl-dist">${fmtD(item.val)}</span>
+    </div>`;
+  }
+  if (!inserted) {
+    rows += `<div class="pl-row pl-current">
+      <span class="pl-label">▶ Current price</span>
+      <span class="pl-price">${fmtP(price)}</span>
+      <span class="pl-dist"></span>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="card-title">📐 Time-Based Levels</div>
+    <div class="price-ladder">${rows}</div>
+  </div>`;
+}
+
 // ── Tier 2: Futures Basis & CVD ────────────────────────────
 function renderBasisCvd(a) {
   const fmtM = v => {
@@ -541,55 +745,20 @@ function renderOptions(a) {
   return h;
 }
 
-// ── Tier 2: Likvidace (live WebSocket history) ─────────────
-function renderLiquidations(a) {
-  const liq = a.liquidations;
-  if (!liq) return '<div class="dim" style="font-size:12px">Data nedostupná.</div>';
-
-  const fmtM = v => {
-    if (!v) return '$0';
-    if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B';
-    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K';
-    return '$' + v;
-  };
-
-  const period = (stats, label) => {
-    const total = (stats.long_usd || 0) + (stats.short_usd || 0);
-    if (total === 0) return `
-      <div>
-        <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:4px">${label}</div>
-        <div class="dim" style="font-size:11px">žádné</div>
-      </div>`;
-    // bar: červená = long liq (bearish), zelená = short liq (bullish)
-    const longPct = Math.round(stats.long_usd / total * 100);
-    const shortPct = 100 - longPct;
-    return `
-      <div>
-        <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:4px">${label}</div>
-        <div class="row"><span class="bear">LONG liq</span><span style="margin-left:auto">${fmtM(stats.long_usd)}<span class="dim" style="font-size:10px"> (${stats.long_count})</span></span></div>
-        <div class="row"><span class="bull">SHORT liq</span><span style="margin-left:auto">${fmtM(stats.short_usd)}<span class="dim" style="font-size:10px"> (${stats.short_count})</span></span></div>
-        <div style="height:4px;background:var(--border);border-radius:2px;margin-top:5px;display:flex;overflow:hidden">
-          <div style="width:${longPct}%;background:var(--red);opacity:.8" title="${longPct}% long liq"></div>
-          <div style="width:${shortPct}%;background:var(--green);opacity:.8" title="${shortPct}% short liq"></div>
-        </div>
-      </div>`;
-  };
-
-  const statusLine = liq.collecting
-    ? `<span class="bull">●</span> Stream aktivní — ${liq.total} zachycených liq. pro tuto minci`
-    : `<span class="dim">○ Kolektor neběží</span>`;
-
-  return `
-    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">${statusLine}</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      ${period(liq['1h'],  '1H')}
-      ${period(liq['4h'],  '4H')}
-      ${period(liq['24h'], '24H')}
-    </div>
-    <div style="font-size:10px;color:var(--sub);margin-top:6px">
-      LONG liq = nucený prodej long pozice → bearish tlak &nbsp;|&nbsp; SHORT liq = nucený nákup → bullish tlak
-    </div>`;
+// ── Tier 2: Likvidace — odkaz na CoinGlass ─────────────────
+function renderLiquidations() {
+  return `<a href="https://www.coinglass.com/LiquidationData"
+              target="_blank" rel="noopener"
+              style="display:inline-flex;align-items:center;gap:6px;
+                     color:var(--accent);font-size:13px;font-weight:500;
+                     text-decoration:none">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+      <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+    </svg>
+    Liquidation data – CoinGlass
+  </a>`;
 }
 
 // ── Coin view ──────────────────────────────────────────────
@@ -640,7 +809,7 @@ function coinHTML(a) {
       <span class="badge ${c}">${lbl}</span>
     </div>
 
-    <div class="g2">
+    <div class="g3">
       <div class="card">
         <div class="card-title">Trend &amp; Signály</div>
         <div class="row"><span class="row-label">HTF trend (1D/4H)</span><span class="row-val ${trendCls(a.htf_trend)}">${a.htf_trend}</span></div>
@@ -656,6 +825,8 @@ function coinHTML(a) {
         <div class="row"><span class="row-label">Volume Profile</span><span class="row-val dim" style="font-size:11px">POC ${fmt(a.vp&&a.vp.poc)} | VAH ${fmt(a.vp&&a.vp.vah)} | VAL ${fmt(a.vp&&a.vp.val)}</span></div>
         <div class="row"><span class="row-label">Funding rate</span><span class="row-val ${fundingCls}" style="font-size:11px">${a.funding_note || 'N/A'}</span></div>
       </div>
+
+      ${renderE2Signal(a)}
 
       <div class="card">
         <div class="card-title">Pravděpodobnost (heuristika)</div>
@@ -705,27 +876,40 @@ function coinHTML(a) {
 
     <div class="card mb">
       <div class="card-title">Likvidace — live stream (od spuštění appky)</div>
-      ${renderLiquidations(a)}
+      ${renderLiquidations()}
     </div>
 
-    <div class="g2">
-      <div class="card long-side">
-        <div class="card-title">🟢 Long scénář</div>
-        <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(a.long.entry)}</span></div>
-        <div class="trade-row"><span class="t-label">Stop-Loss</span><span class="t-val t-sl">${fmt(a.long.sl)}</span></div>
-        <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(a.long.tp1)}</span></div>
-        <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(a.long.tp2)}</span></div>
-        <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(a.long.tp3)}</span></div>
-      </div>
-      <div class="card short-side">
-        <div class="card-title">🔴 Short scénář</div>
-        <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(a.short.entry)}</span></div>
-        <div class="trade-row"><span class="t-label">Stop-Loss</span><span class="t-val t-sl">${fmt(a.short.sl)}</span></div>
-        <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(a.short.tp1)}</span></div>
-        <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(a.short.tp2)}</span></div>
-        <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(a.short.tp3)}</span></div>
-      </div>
-    </div>
+    ${(() => {
+      const e2 = a.e2_signal || 'WAIT';
+      const longConfirmed  = e2 === 'LONG';
+      const shortConfirmed = e2 === 'SHORT';
+      const longCls  = longConfirmed  ? 'e2-confirmed' : shortConfirmed ? 'e2-inactive' : '';
+      const shortCls = shortConfirmed ? 'e2-confirmed' : longConfirmed  ? 'e2-inactive' : '';
+      const e2Badge  = `<span class="e2-badge">E2 ✅</span>`;
+      const tlCard   = renderTimeLevels(a);
+      return `
+        <div class="g2" style="align-items:start">
+          <div style="display:flex;flex-direction:column;gap:var(--gap)">
+            <div class="card long-side ${longCls}">
+              <div class="card-title">🟢 Long scénář${longConfirmed ? e2Badge : ''}</div>
+              <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(a.long.entry)}</span></div>
+              <div class="trade-row"><span class="t-label">Stop-Loss</span><span class="t-val t-sl">${fmt(a.long.sl)}</span></div>
+              <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(a.long.tp1)}</span></div>
+              <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(a.long.tp2)}</span></div>
+              <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(a.long.tp3)}</span></div>
+            </div>
+            <div class="card short-side ${shortCls}">
+              <div class="card-title">🔴 Short scénář${shortConfirmed ? e2Badge : ''}</div>
+              <div class="trade-row"><span class="t-label">Vstup</span><span class="t-val t-entry">${fmt(a.short.entry)}</span></div>
+              <div class="trade-row"><span class="t-label">Stop-Loss</span><span class="t-val t-sl">${fmt(a.short.sl)}</span></div>
+              <div class="trade-row"><span class="t-label">TP1</span><span class="t-val t-tp">${fmt(a.short.tp1)}</span></div>
+              <div class="trade-row"><span class="t-label">TP2</span><span class="t-val t-tp">${fmt(a.short.tp2)}</span></div>
+              <div class="trade-row"><span class="t-label">TP3</span><span class="t-val t-tp">${fmt(a.short.tp3)}</span></div>
+            </div>
+          </div>
+          ${tlCard}
+        </div>`;
+    })()}
 
     <div class="card mb">
       <div class="card-title">Invalidation</div>
@@ -1341,6 +1525,7 @@ function journalHTML(jd) {
       <td class="dim" style="font-size:11px;white-space:nowrap">${dt}</td>
       <td><strong>${e.symbol.replace('/USDT','')}</strong></td>
       <td><span class="${conclusionCls(e.conclusion)}">${conc}</span></td>
+      <td><span class="${e.e2_signal==='LONG'?'bull':e.e2_signal==='SHORT'?'bear':'dim'}" style="font-weight:700;font-size:11px">${e.e2_signal||'–'}</span></td>
       <td style="font-variant-numeric:tabular-nums">${e.trader_score ?? '–'}</td>
       <td class="dim" style="font-size:11px;font-variant-numeric:tabular-nums">${e.long_pct}/${e.short_pct}/${e.wait_pct}</td>
       <td style="font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums">
@@ -1375,7 +1560,7 @@ function journalHTML(jd) {
           style="background:var(--panel);border:1px solid var(--border);color:var(--fg);padding:3px 7px;border-radius:3px;font-size:11.5px;width:160px">
       </td>
     </tr>`;
-  }).join('') : `<tr><td colspan="10" style="text-align:center;color:var(--sub);padding:18px">Zatím žádné záznamy — vzniknou automaticky po první analýze.</td></tr>`;
+  }).join('') : `<tr><td colspan="11" style="text-align:center;color:var(--sub);padding:18px">Zatím žádné záznamy — vzniknou automaticky po první analýze.</td></tr>`;
 
   return `
     <div class="card mb">
@@ -1391,7 +1576,7 @@ function journalHTML(jd) {
       <div style="overflow-x:auto">
         <table class="jnl-table">
           <thead><tr>
-            <th>Čas</th><th>Coin</th><th>Závěr</th><th>Score</th>
+            <th>Čas</th><th>Coin</th><th>Závěr</th><th>E2</th><th>Score</th>
             <th>L/S/W%</th><th>Vstup L</th><th>Akce</th><th>Výsledek</th><th>P&amp;L $</th><th>Poznámka</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -1471,6 +1656,62 @@ function pcCalc() {
     <div>Velikost pozice: <strong>${posSize.toFixed(2)} USDT</strong>  (páka ${leverage.toFixed(1)}×)</div>
     ${rrRow}
   `;
+}
+
+// ── Screenshot ─────────────────────────────────────────────
+async function takeScreenshot() {
+  if (typeof html2canvas === 'undefined') {
+    showToast('Chyba: html2canvas se nenačetl');
+    return;
+  }
+  const btn = document.getElementById('screenshot-btn');
+  btn.disabled = true;
+  try {
+    const canvas = await html2canvas(document.body, {
+      scale: 4,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#0d1117',
+      x: window.scrollX,
+      y: window.scrollY,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+    });
+    const dataUrl = canvas.toDataURL('image/png', 1.0);
+
+    const coinRaw = activeTab.replace('/USDT', '').replace(/[^A-Za-z0-9]/g, '') || 'screenshot';
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    const filename = `${coinRaw}_${ts}.png`;
+
+    const r = await fetch('/api/screenshot', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: dataUrl, filename}),
+    });
+    const d = await r.json();
+    showToast(d.ok ? 'Screenshot uložen' : 'Chyba: ' + d.error);
+  } catch(e) {
+    showToast('Chyba: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showToast(msg) {
+  let toast = document.getElementById('screenshot-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'screenshot-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.className = 'toast-show';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.className = ''; }, 2000);
 }
 
 // ── Boot ───────────────────────────────────────────────────

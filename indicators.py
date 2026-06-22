@@ -384,6 +384,78 @@ def volatility_regime(df: pd.DataFrame, atr_period: int = 14,
     }
 
 
+def time_based_levels(df: pd.DataFrame) -> dict:
+    """
+    Vypočítá klíčové časové cenové hladiny z 1H OHLCV dat.
+
+    Vrací slovník:
+      weekly_open/high/low      — aktuální týden (pondělí 00:00 UTC)
+      monday_open/high/low      — pondělí aktuálního týdne
+      prev_week_high/low        — předchozí týden
+      monthly_open              — první bar aktuálního měsíce
+      prev_month_high           — maximum předchozího měsíce
+
+    Timestamps mohou být timezone-naive (UTC) nebo tz-aware — oba formáty zpracujeme.
+    """
+    if df is None or df.empty:
+        return {}
+
+    from datetime import timedelta
+
+    ts = pd.to_datetime(df["timestamp"])
+    if ts.dt.tz is None:
+        ts = ts.dt.tz_localize("UTC")
+    else:
+        ts = ts.dt.tz_convert("UTC")
+
+    now = ts.iloc[-1]
+    # Monday 00:00 UTC of current week
+    days_back = now.dayofweek          # 0 = Monday
+    week_start = (now - pd.Timedelta(days=days_back)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    prev_week_start = week_start - pd.Timedelta(days=7)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start.month == 1:
+        prev_month_start = month_start.replace(year=month_start.year - 1, month=12)
+    else:
+        prev_month_start = month_start.replace(month=month_start.month - 1)
+
+    def _mask(start, end):
+        return (ts >= pd.Timestamp(start)) & (ts < pd.Timestamp(end))
+
+    curr_week   = _mask(week_start,      now + pd.Timedelta(hours=1))
+    monday_only = curr_week & (ts.dt.dayofweek == 0)
+    prev_week   = _mask(prev_week_start, week_start)
+    curr_month  = _mask(month_start,     now + pd.Timedelta(hours=1))
+    prev_month  = _mask(prev_month_start, month_start)
+
+    def _open(m):
+        s = df.loc[m]
+        return float(s["open"].iloc[0]) if not s.empty else None
+
+    def _high(m):
+        s = df.loc[m]
+        return float(s["high"].max()) if not s.empty else None
+
+    def _low(m):
+        s = df.loc[m]
+        return float(s["low"].min()) if not s.empty else None
+
+    return {
+        "weekly_open":     _open(curr_week),
+        "weekly_high":     _high(curr_week),
+        "weekly_low":      _low(curr_week),
+        "monday_open":     _open(monday_only),
+        "monday_high":     _high(monday_only),
+        "monday_low":      _low(monday_only),
+        "prev_week_high":  _high(prev_week),
+        "prev_week_low":   _low(prev_week),
+        "monthly_open":    _open(curr_month),
+        "prev_month_high": _high(prev_month),
+    }
+
+
 def analyze_timeframe(df: pd.DataFrame, exclude_last: bool = True) -> dict:
     """
     Spočítá všechny indikátory pro jeden timeframe a vrátí shrnutí.

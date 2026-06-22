@@ -21,6 +21,64 @@ def _fmt(price, decimals=None):
     return f"{price:,.{decimals}f}"
 
 
+def _compute_e2_signal(
+    htf_trend: str,
+    stf_trend: str,
+    rsi_val: float,
+    last_price: float,
+    price_vs_vwap: str,
+    poc,
+    volatility_regime: dict | None,
+    market_structure: dict | None,
+    divergence: str,
+    time_levels: dict | None = None,
+) -> tuple[str, dict]:
+    """
+    Vypočítá E2 signál (9 podmínek, RSI LONG 40–70 / SHORT 30–60).
+    9. podmínka: cena nad/pod Weekly Open = bullish/bearish bias.
+    Vrací (signal, checklist) kde signal = "LONG" / "SHORT" / "WAIT".
+    """
+    vol_str  = (volatility_regime or {}).get("regime", "")
+    ms_str   = (market_structure or {}).get("structure", "")
+    div_str  = divergence or ""
+    vwap_str = (price_vs_vwap or "").lower()
+    tl       = time_levels or {}
+    wo       = tl.get("weekly_open")   # None = data nedostupná → podmínka neselhává
+
+    long_cond = {
+        "HTF BULLISH":       htf_trend == "BULLISH",
+        "STF BULLISH":       stf_trend == "BULLISH",
+        "RSI 40–70":         rsi_val is not None and 40.0 <= rsi_val <= 70.0,
+        "Cena nad VWAP":     "nad" in vwap_str,
+        "Cena nad POC":      poc is not None and last_price > poc,
+        "Vol. TRENDING":     vol_str == "TRENDING",
+        "BOS BULLISH":       ms_str == "BULLISH",
+        "Bez bear. div.":    "BEARISH" not in div_str,
+        "Nad Weekly Open":   wo is None or last_price > wo,
+    }
+    short_cond = {
+        "HTF BEARISH":       htf_trend == "BEARISH",
+        "STF BEARISH":       stf_trend == "BEARISH",
+        "RSI 30–60":         rsi_val is not None and 30.0 <= rsi_val <= 60.0,
+        "Cena pod VWAP":     "pod" in vwap_str,
+        "Cena pod POC":      poc is not None and last_price < poc,
+        "Vol. TRENDING":     vol_str == "TRENDING",
+        "BOS BEARISH":       ms_str == "BEARISH",
+        "Bez bull. div.":    "BULLISH" not in div_str,
+        "Pod Weekly Open":   wo is None or last_price < wo,
+    }
+
+    if all(long_cond.values()):
+        return "LONG", long_cond
+    if all(short_cond.values()):
+        return "SHORT", short_cond
+
+    long_score  = sum(long_cond.values())
+    short_score = sum(short_cond.values())
+    checklist   = long_cond if long_score >= short_score else short_cond
+    return "WAIT", checklist
+
+
 def _trend_from_ichimoku_text(text: str) -> str:
     if "nad mrakem" in text:
         return "BULLISH"
@@ -44,7 +102,8 @@ def build_symbol_analysis(
     basis: dict = None,
     cvd: dict = None,
     options_data: dict = None,
-    liquidations: dict = None,
+    # Time-based price levels
+    time_levels: dict = None,
 ) -> dict:
     """tf_results: {timeframe: analyze_timeframe() output or None}"""
     tf_1d = tf_results.get("1d")
@@ -80,24 +139,40 @@ def build_symbol_analysis(
 
     impuls_text = f"RSI({momentum_tf['rsi']:.0f}) na momentum TF, cena je {momentum_tf['price_vs_vwap']}, {momentum_tf['divergence']}"
 
-    # --- Long / Short scénáře: kombinace Volume Profile + ATR (adaptivní na volatilitu) ---
+    # --- Long / Short scénáře: kombinace Volume Profile + ATR + Time Levels ---
     entry_tf = tf_1h or tf_4h or htf
     vp = entry_tf["volume_profile"]
     swing_high = entry_tf["swing_high"]
     swing_low = entry_tf["swing_low"]
     atr_val = entry_tf.get("atr") or last_price * 0.005
+    tl = time_levels or {}
 
-    # SL = max(1.5x ATR, vzdálenost ke swing high/low) - ať se SL přizpůsobí volatilitě,
-    # ne jen náhodnému swingu, který může být z úplně jiného volatility režimu
     risk = max(atr_val * 1.5, abs(last_price - swing_low) * 0.5)
 
-    long_entry = max(vp["val"], last_price * 0.998)
+    # Long vstupní zóna: nejbližší podpora pod cenou z time levels (Monday Low, Weekly Open)
+    # nebo VAL — whichever is higher (closest to current price)
+    _long_supports = [vp["val"]]
+    for _name in ("monday_low", "weekly_open", "monthly_open"):
+        _lvl = tl.get(_name)
+        if _lvl is not None and _lvl < last_price:
+            _long_supports.append(_lvl)
+    long_entry = max(_long_supports)
+    long_entry = max(long_entry, last_price * 0.990)   # max 1 % pod cenou
+
     long_sl = min(swing_low, long_entry - risk)
     long_tp1 = vp["poc"] if vp["poc"] > long_entry else long_entry + risk
     long_tp2 = max(vp["vah"], swing_high)
     long_tp3 = long_entry + (long_tp2 - long_entry) * 1.6
 
-    short_entry = min(vp["vah"], last_price * 1.002)
+    # Short vstupní zóna: nejbližší odpor nad cenou (Monday High, Weekly High) nebo VAH
+    _short_resistances = [vp["vah"]]
+    for _name in ("monday_high", "weekly_high", "prev_week_high", "prev_month_high"):
+        _lvl = tl.get(_name)
+        if _lvl is not None and _lvl > last_price:
+            _short_resistances.append(_lvl)
+    short_entry = min(_short_resistances)
+    short_entry = min(short_entry, last_price * 1.010)  # max 1 % nad cenou
+
     short_sl = max(swing_high, short_entry + risk)
     short_tp1 = vp["poc"] if vp["poc"] < short_entry else short_entry - risk
     short_tp2 = min(vp["val"], swing_low)
@@ -170,6 +245,20 @@ def build_symbol_analysis(
                 "volatility_regime": tf_res.get("volatility_regime"),
             }
 
+    # E2 paper trading signal (9 podmínek — přidán Weekly Open bias)
+    e2_signal, e2_checklist = _compute_e2_signal(
+        htf_trend=htf_trend,
+        stf_trend=stf_trend,
+        rsi_val=rsi_val,
+        last_price=last_price,
+        price_vs_vwap=momentum_tf.get("price_vs_vwap", ""),
+        poc=(vp.get("poc") if vp else None),
+        volatility_regime=vr,
+        market_structure=ms,
+        divergence=entry_tf.get("divergence", ""),
+        time_levels=tl,
+    )
+
     return {
         "symbol": symbol,
         "last_price": last_price,
@@ -207,10 +296,12 @@ def build_symbol_analysis(
         "basis": basis,
         "cvd": cvd,
         "options_data": options_data,
-        "liquidations": liquidations,
         "market_structure": ms,
         "volatility_regime": vr,
         "tf_ms_vr": tf_ms_vr,
+        "e2_signal":    e2_signal,
+        "e2_checklist": e2_checklist,
+        "time_levels":  tl,
     }
 
 

@@ -71,6 +71,12 @@ def init_db():
             );
         """)
         con.commit()
+        # Migrace: přidej e2_signal sloupec pokud neexistuje (idempotentní)
+        try:
+            con.execute("ALTER TABLE journal_entries ADD COLUMN e2_signal TEXT")
+            con.commit()
+        except Exception:
+            pass
         con.close()
 
 
@@ -270,16 +276,18 @@ def log_setups(analyses: list):
             if "error" in a:
                 continue
             try:
+                e2_sig = a.get("e2_signal")
                 con.execute(
                     """INSERT OR IGNORE INTO journal_entries
                        (symbol, ts, candle_ts, conclusion, long_pct, short_pct, wait_pct,
-                        trader_score, long_entry, long_sl, short_entry, short_sl)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        trader_score, long_entry, long_sl, short_entry, short_sl, e2_signal)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (a["symbol"], now, candle_ts,
                      a.get("conclusion"), a.get("long_pct"), a.get("short_pct"), a.get("wait_pct"),
                      a.get("trader_score"),
                      a.get("long", {}).get("entry"), a.get("long", {}).get("sl"),
-                     a.get("short", {}).get("entry"), a.get("short", {}).get("sl")),
+                     a.get("short", {}).get("entry"), a.get("short", {}).get("sl"),
+                     e2_sig),
                 )
             except Exception:
                 pass

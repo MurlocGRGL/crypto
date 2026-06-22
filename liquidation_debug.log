@@ -1,0 +1,24 @@
+13:40:25.313 ============================================================
+13:40:25.313   Faze 3: individualni streams + alternativy (120s)
+13:40:25.314 ============================================================
+13:40:25.315 
+Cekam 120s...
+
+13:40:26.094 [BN-markprice-test] OPEN OK
+13:40:26.095 [BN-raw-btc] OPEN OK
+13:40:26.095 [BN-combined-pairs] OPEN OK
+13:40:26.096 [BN-arr-control] OPEN OK
+13:42:25.598 [BN-combined-pairs] CLOSE code=None msg=None
+13:42:25.873 [BN-raw-btc] CLOSE code=None msg=None
+13:42:26.190 [BN-arr-control] CLOSE code=None msg=None
+13:42:26.401 [BN-markprice-test] CLOSE code=None msg=None
+13:42:27.002 ============================================================
+13:42:27.002 VYSLEDKY:
+13:42:27.003   BN-arr-control           :    0 zprav 
+13:42:27.003   BN-combined-pairs        :    0 zprav 
+13:42:27.003   BN-markprice-test        :    0 zprav 
+13:42:27.003   BN-raw-btc               :    0 zprav 
+13:42:27.004 
+13:42:27.004 INTERPRET:
+13:42:27.004   [!] markPrice = 0 => Binance WS blokovan pro tuto IP (firewall/geo)
+13:42:27.004 ============================================================

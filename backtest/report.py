@@ -126,15 +126,14 @@ def render_comparison_report(
 
     # ── Metodika ──────────────────────────────────────────────────────────────
     header = (
-        f"# Backtest — Srovnání variant signálového prahu\n"
+        f"# Backtest — Srovnání D vs E (confluence varianty)\n"
         f"Vygenerováno: {now}\n\n"
         f"## Testované varianty\n\n"
-        f"| Varianta | Popis |\n"
+        f"| Varianta | Podmínky |\n"
         f"|---|---|\n"
-        f"| Baseline | long_pct / short_pct ≥ 45 (stávající live chování) |\n"
-        f"| A | long_pct / short_pct ≥ 60 |\n"
-        f"| B | long_pct / short_pct ≥ 65 |\n"
-        f"| C | long_pct / short_pct ≥ 60 AND HTF trend souhlasí se směrem |\n\n"
+        f"| D | HTF=trend, STF=trend, RSI v pásmu, close > VWAP, close > POC (5 podmínek) |\n"
+        f"| E | vše z D + Volatility Regime=TRENDING + poslední BOS souhlasí + RSI divergence neblokuje (8 podmínek) |\n\n"
+        f"Každá varianta testována s pákou **1×, 3×, 5×** (margin model: 1 % účtu per obchod).\n\n"
         f"**SL/TP:** {ATR_SL_MULT}× ATR (1:1 R:R)  |  "
         f"**Entry:** open příšti svíčky (no look-ahead)  |  "
         f"**Fees sloupec:** 0.04 % taker round-trip\n\n"
