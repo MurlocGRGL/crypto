@@ -3,6 +3,9 @@
 CLI spouštěč backtestingu — srovnání E2 vs G.
 
 Varianty:
+  LIVE  Presna live E2 logika (9 podminek) pres sdileny strategy.py engine —
+        tentyz kod, co bezi v dashboardu a e2_trackeru. RSI LONG [40-70] / SHORT [30-60].
+        Vstup: open nasledujici svicky, SL/TP 1.5xATR (izoluje edge smeru).
   E2  Konfluence (8 binarnich podminek), RSI LONG [40-70] / SHORT [30-60]
       Vstup: open nasledujici svicky po signalu
   H   E2 + 9. podminka (Weekly Open bias) + vstup na time-based level:
@@ -38,12 +41,18 @@ parser.add_argument("--fees",    type=float, default=0.04,
 args = parser.parse_args()
 
 # ── Definice variant ──────────────────────────────────────────────────────────
-_E2 = {"signal_mode": "confluence_e", "rsi_lo": 40.0, "rsi_hi": 70.0,
-       "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
-_H  = {"signal_mode": "variant_h",    "rsi_lo": 40.0, "rsi_hi": 70.0,
-       "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
+_E2   = {"signal_mode": "confluence_e", "rsi_lo": 40.0, "rsi_hi": 70.0,
+         "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
+_H    = {"signal_mode": "variant_h",    "rsi_lo": 40.0, "rsi_hi": 70.0,
+         "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
+_LIVE = {"signal_mode": "live_e2",      "rsi_lo": 40.0, "rsi_hi": 70.0,
+         "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
 
 VARIANTS = [
+    # LIVE: přesná live E2 logika (9 podmínek) přes sdílený strategy engine —
+    # tentýž kód, co běží v dashboardu a e2_trackeru. Vstup ATR-based next-open.
+    {**_LIVE, "label": "LIVE 3x", "leverage": 3.0},
+    {**_LIVE, "label": "LIVE 5x", "leverage": 5.0},
     # E2 (baseline): 8 podminek, vstup na dalsi open
     {**_E2, "label": "E2 3x", "leverage": 3.0},
     {**_E2, "label": "E2 5x", "leverage": 5.0},

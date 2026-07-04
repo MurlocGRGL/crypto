@@ -126,13 +126,16 @@ def render_comparison_report(
 
     # ── Metodika ──────────────────────────────────────────────────────────────
     header = (
-        f"# Backtest — Srovnání D vs E (confluence varianty)\n"
+        f"# Backtest — Srovnání LIVE vs E2 vs H\n"
         f"Vygenerováno: {now}\n\n"
         f"## Testované varianty\n\n"
         f"| Varianta | Podmínky |\n"
         f"|---|---|\n"
-        f"| D | HTF=trend, STF=trend, RSI v pásmu, close > VWAP, close > POC (5 podmínek) |\n"
-        f"| E | vše z D + Volatility Regime=TRENDING + poslední BOS souhlasí + RSI divergence neblokuje (8 podmínek) |\n\n"
+        f"| LIVE | Přesná live E2 logika (9 podmínek) přes sdílený strategy.py engine — "
+        f"tentýž kód, co běží v dashboardu a e2_trackeru. Vstup: open příští svíčky, SL/TP 1.5×ATR. |\n"
+        f"| E2 | Konfluence 8 podmínek (bez Weekly Open): HTF+STF trend, RSI v pásmu, "
+        f"close vs VWAP+POC, Vol=TRENDING, BOS souhlasí, divergence neblokuje. |\n"
+        f"| H | E2 + 9. podmínka (Weekly Open bias) + limit vstup na time-based level (VAL/VAH/Wkly/Monday). |\n\n"
         f"Každá varianta testována s pákou **1×, 3×, 5×** (margin model: 1 % účtu per obchod).\n\n"
         f"**SL/TP:** {ATR_SL_MULT}× ATR (1:1 R:R)  |  "
         f"**Entry:** open příšti svíčky (no look-ahead)  |  "

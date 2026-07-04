@@ -28,6 +28,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
+import strategy
 
 # ── Konstanty ─────────────────────────────────────────────────────────────────
 
@@ -804,6 +805,43 @@ def run_symbol_backtest(
                 rsi_lo=rsi_lo, rsi_hi=rsi_hi,
             )
             trader_score = 90.0  # fixní skóre: 8 podmínek splněno = velmi selektivní setup
+        elif signal_mode == "live_e2":
+            # PŘESNÁ live E2 logika (9 podmínek) přes sdílený strategy engine —
+            # tentýž kód, který běží v dashboardu a e2_trackeru.
+            # Rozdíl vs. confluence_e (Varianta E): zahrnuje 9. podmínku (cena vs
+            # Weekly Open). Entry/SL/TP zůstává ATR-based next-open jako u ostatních
+            # variant → izoluje edge SMĚRU, ne způsobu vstupu (viz docstring nahoře).
+            close_i = float(bar["close"])
+            vwap_i  = float(pre_1h["vwap"].iloc[i])
+            poc_i   = float(pre_1h["poc"].iloc[i])
+            if pd.isna(vwap_i) or pd.isna(poc_i):
+                continue
+            regime_i = pre_1h["vol_regime"].iloc[i]
+            bos_i    = pre_1h["last_bos"].iloc[i]
+            bull_i   = bool(pre_1h["bullish_div"].iloc[i])
+            bear_i   = bool(pre_1h["bearish_div"].iloc[i])
+            wo_i     = pre_1h["tl_weekly_open"].iloc[i]
+
+            # Live očekává divergenci jako text; složíme ho z booleanů
+            div_str = ""
+            if bear_i:
+                div_str += "BEARISH "
+            if bull_i:
+                div_str += "BULLISH"
+
+            direction, _cl = strategy.evaluate_e2_conditions(
+                htf_trend=htf_trend,
+                stf_trend=stf_trend,
+                rsi_val=rsi_val,
+                last_price=close_i,
+                price_vs_vwap="nad VWAP" if close_i > vwap_i else "pod VWAP",
+                poc=poc_i,
+                volatility_regime={"regime": regime_i if isinstance(regime_i, str) else ""},
+                market_structure={"structure": bos_i if isinstance(bos_i, str) else ""},
+                divergence=div_str,
+                time_levels=({"weekly_open": float(wo_i)} if not pd.isna(wo_i) else {}),
+            )
+            trader_score = 90.0
         elif signal_mode == "variant_g":
             # Stejná E2 detekce, ale vstup se odkládá — pending_g místo přímého otevření
             vwap_i     = float(pre_1h["vwap"].iloc[i])
