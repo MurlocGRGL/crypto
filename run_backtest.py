@@ -47,12 +47,17 @@ _H    = {"signal_mode": "variant_h",    "rsi_lo": 40.0, "rsi_hi": 70.0,
          "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
 _LIVE = {"signal_mode": "live_e2",      "rsi_lo": 40.0, "rsi_hi": 70.0,
          "threshold": 45, "require_htf_confirm": False, "score_threshold": 65.0}
+# LIVE-L = stejná logika, ale TP ladder (TP1/TP2/TP3 částečné exity + trailing SL)
+_LIVE_L = {**_LIVE, "tp_ladder": True}
 
 VARIANTS = [
     # LIVE: přesná live E2 logika (9 podmínek) přes sdílený strategy engine —
-    # tentýž kód, co běží v dashboardu a e2_trackeru. Vstup ATR-based next-open.
+    # tentýž kód, co běží v dashboardu a e2_trackeru. Vstup ATR-based next-open, single TP1 1:1.
     {**_LIVE, "label": "LIVE 3x", "leverage": 3.0},
     {**_LIVE, "label": "LIVE 5x", "leverage": 5.0},
+    # LIVE-L: tatáž logika + TP ladder (1/3 na TP1=1R, TP2=2R, TP3=3R; po TP1 SL→BE, po TP2 SL→TP1)
+    {**_LIVE_L, "label": "LIVE-L 3x", "leverage": 3.0},
+    {**_LIVE_L, "label": "LIVE-L 5x", "leverage": 5.0},
     # E2 (baseline): 8 podminek, vstup na dalsi open
     {**_E2, "label": "E2 3x", "leverage": 3.0},
     {**_E2, "label": "E2 5x", "leverage": 5.0},
@@ -108,6 +113,7 @@ for v in VARIANTS:
             leverage=v["leverage"],
             rsi_lo=rsi_lo, rsi_hi=rsi_hi,
             score_threshold=s_thr,
+            tp_ladder=v.get("tp_ladder", False),
         )
         # fees = args.fees
         resf = run_symbol_backtest(
@@ -118,6 +124,7 @@ for v in VARIANTS:
             leverage=v["leverage"],
             rsi_lo=rsi_lo, rsi_hi=rsi_hi,
             score_threshold=s_thr,
+            tp_ladder=v.get("tp_ladder", False),
         )
 
         if "error" in res0:

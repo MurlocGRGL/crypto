@@ -40,6 +40,13 @@ ATR_SL_MULT   = 1.5   # SL vzdálenost = ATR_SL_MULT × ATR
 ATR_TP_MULT   = 1.5   # TP1 vzdálenost = ATR_TP_MULT × ATR (1:1 R:R)
 SWING_WINDOW  = 20
 
+# TP ladder (opt-in přes tp_ladder=True) — víc-cílový výstup s částečnými exity.
+# TP2/TP3 jako násobky ATR → pevné R:R na každé úrovni (TP1=1R, TP2=2R, TP3=3R).
+ATR_TP2_MULT = 3.0    # TP2 = 2:1 R
+ATR_TP3_MULT = 4.5    # TP3 = 3:1 R
+LADDER_FRACS = (1.0 / 3, 1.0 / 3, 1.0 / 3)   # část pozice odebraná na TP1/TP2/TP3
+# SL management: po TP1 → break-even (entry), po TP2 → TP1 (zamkne zisk)
+
 TRADE_TIMEOUT_BARS       = 48   # 2 dny na 1H
 HYPE_SMALL_SAMPLE_THRESH = 30   # pod tímto počtem obchodů = varování
 G_CONFIRM_WINDOW         = 6    # max barů čekání na potvrzovací svíčku (Varianta G)
@@ -525,6 +532,97 @@ def _score_f(
     return float(max(0.0, min(100.0, score)))
 
 
+# ── TP ladder resolver ─────────────────────────────────────────────────────────
+
+def _resolve_ladder_bar(ot, bar, i, leverage, fees_pct, equity, trades,
+                        force_close_price=None):
+    """
+    Vyhodnotí jeden bar pro obchod s TP ladderem (částečné exity + trailing SL).
+    Mutuje `ot`; při uzavření appenduje do equity/trades a nastaví ot["_closed"].
+
+    Model (pesimistický, no-look-ahead):
+      1. Nejdřív SL na AKTUÁLNÍ úrovni (po TP1 = break-even, po TP2 = TP1).
+         Když low/high protne SL → zbytek pozice ven na SL.
+      2. Jinak TP1→TP2→TP3 vzestupně: každý zasažený cíl odebere svůj díl a
+         posune SL (TP1→BE, TP2→TP1). TP3 uzavře zbytek.
+      3. Timeout / force_close_price: zbytek ven na close (resp. dané ceně).
+    """
+    side   = ot["side"]; entry = ot["entry"]; sl_dist = ot["sl_dist"]
+    high_i = float(bar["high"]); low_i = float(bar["low"])
+    bars_held = i - ot["entry_bar"]
+
+    def _add(price, frac):
+        move = ((price - entry) / entry)   if side == "LONG" else ((entry - price) / entry)
+        r    = ((price - entry) / sl_dist) if side == "LONG" else ((entry - price) / sl_dist)
+        ot["realized_r"]    += r * frac
+        ot["realized_move"] += move * frac
+        ot["remaining"]     -= frac
+
+    exit_reason = None
+    last_price  = ot["sl"]
+
+    if force_close_price is not None:
+        _add(force_close_price, ot["remaining"])
+        ot["remaining"] = 0.0
+        exit_reason = "EOD"; last_price = force_close_price
+    else:
+        # 1) pesimisticky nejdřív SL (aktuální — může být break-even/TP1 po trailingu)
+        sl_hit = (low_i <= ot["sl"]) if side == "LONG" else (high_i >= ot["sl"])
+        if sl_hit:
+            _add(ot["sl"], ot["remaining"])
+            ot["remaining"] = 0.0
+            exit_reason = "SL" if not ot["filled"] else "SL_TRAIL"
+            last_price  = ot["sl"]
+        else:
+            # 2) favorable TP1→TP2→TP3
+            for k, tpk, frac in ((1, ot["tp1"], LADDER_FRACS[0]),
+                                 (2, ot["tp2"], LADDER_FRACS[1]),
+                                 (3, ot["tp3"], LADDER_FRACS[2])):
+                if k in ot["filled"]:
+                    continue
+                reached = (high_i >= tpk) if side == "LONG" else (low_i <= tpk)
+                if not reached:
+                    continue
+                _add(tpk, frac)
+                ot["filled"].append(k)
+                last_price = tpk
+                if   k == 1: ot["sl"] = entry       # break-even
+                elif k == 2: ot["sl"] = ot["tp1"]   # zamkni TP1
+            if ot["remaining"] <= 1e-9:
+                ot["remaining"] = 0.0
+                exit_reason = "TP3" if 3 in ot["filled"] else "TP"
+
+        # 3) timeout — zbytek ven na close
+        if exit_reason is None and bars_held >= TRADE_TIMEOUT_BARS:
+            cprice = float(bar["close"])
+            _add(cprice, ot["remaining"])
+            ot["remaining"] = 0.0
+            exit_reason = "TIMEOUT"; last_price = cprice
+
+    if exit_reason is None:
+        return   # obchod zůstává otevřený
+
+    pnl_r    = ot["realized_r"]
+    pnl_pct  = ot["realized_move"] * leverage * RISK_PER_TRADE
+    fees_acc = 2.0 * leverage * RISK_PER_TRADE * (fees_pct / 100.0)
+    net_pct  = pnl_pct - fees_acc
+    equity.append(equity[-1] * (1.0 + net_pct))
+
+    ot.update({
+        "exit_bar":    i,
+        "exit_price":  round(last_price, 8),
+        "exit_reason": exit_reason,
+        "pnl_r":       round(pnl_r, 4),
+        "pnl_pct":     round(net_pct * 100.0, 4),
+        "bars_held":   bars_held,
+        "win":         pnl_r > 0,
+        "_closed":     True,
+    })
+    for key in ("remaining", "realized_r", "realized_move", "sl_dist"):
+        ot.pop(key, None)
+    trades.append(ot)
+
+
 # ── Hlavní backtest smyčka ────────────────────────────────────────────────────
 
 def run_symbol_backtest(
@@ -538,6 +636,7 @@ def run_symbol_backtest(
     rsi_lo: float = 45.0,         # RSI spodní hranice LONG (Varianta E/G)
     rsi_hi: float = 65.0,         # RSI horní hranice LONG (Varianta E/G); SHORT = [lo-10, hi-10]
     score_threshold: float = 65.0, # práh pro LONG (Varianta F); SHORT < 100-threshold
+    tp_ladder: bool = False,      # True: TP1/TP2/TP3 částečné exity + trailing SL (jinak single TP1 1:1)
 ) -> dict:
     """
     Spustí backtest pro jeden symbol a vrátí:
@@ -595,7 +694,12 @@ def run_symbol_backtest(
                 j1d += 1
 
         # ── Vyhodnoť otevřený obchod ──────────────────────────────────────
-        if open_trade is not None:
+        if open_trade is not None and tp_ladder:
+            _resolve_ladder_bar(open_trade, bar, i, leverage, fees_pct, equity, trades)
+            if open_trade.get("_closed"):
+                open_trade = None
+
+        elif open_trade is not None:
             high_i = float(bar["high"])
             low_i  = float(bar["low"])
             ot     = open_trade
@@ -970,10 +1074,14 @@ def run_symbol_backtest(
         risk = ATR_SL_MULT * atr_val
         if direction == "LONG":
             sl  = entry_price - risk
-            tp1 = entry_price + ATR_TP_MULT * atr_val
+            tp1 = entry_price + ATR_TP_MULT  * atr_val
+            tp2 = entry_price + ATR_TP2_MULT * atr_val
+            tp3 = entry_price + ATR_TP3_MULT * atr_val
         else:
             sl  = entry_price + risk
-            tp1 = entry_price - ATR_TP_MULT * atr_val
+            tp1 = entry_price - ATR_TP_MULT  * atr_val
+            tp2 = entry_price - ATR_TP2_MULT * atr_val
+            tp3 = entry_price - ATR_TP3_MULT * atr_val
 
         # Sanity check
         if direction == "LONG"  and sl >= entry_price:
@@ -989,13 +1097,27 @@ def run_symbol_backtest(
             "entry":        entry_price,
             "sl":           round(sl, 8),
             "tp1":          round(tp1, 8),
+            "tp2":          round(tp2, 8),
+            "tp3":          round(tp3, 8),
             "htf_trend":    htf_trend,
             "stf_trend":    stf_trend,
             "trader_score": trader_score,
+            # ladder stav (používá se jen když tp_ladder=True)
+            "sl_dist":      abs(entry_price - sl),
+            "remaining":    1.0,
+            "realized_r":   0.0,
+            "realized_move": 0.0,
+            "filled":       [],
         }
 
     # Otevřený obchod na konci dat → uzavři za close posledního baru
-    if open_trade is not None:
+    if open_trade is not None and tp_ladder:
+        last = df_1h.iloc[-1]
+        _resolve_ladder_bar(open_trade, last, n - 1, leverage, fees_pct,
+                            equity, trades, force_close_price=float(last["close"]))
+        open_trade = None
+
+    elif open_trade is not None:
         last        = df_1h.iloc[-1]
         entry       = open_trade["entry"]
         sl          = open_trade["sl"]

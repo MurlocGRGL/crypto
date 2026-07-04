@@ -126,13 +126,15 @@ def render_comparison_report(
 
     # ── Metodika ──────────────────────────────────────────────────────────────
     header = (
-        f"# Backtest — Srovnání LIVE vs E2 vs H\n"
+        f"# Backtest — Srovnání LIVE / LIVE-L / E2 / H\n"
         f"Vygenerováno: {now}\n\n"
         f"## Testované varianty\n\n"
         f"| Varianta | Podmínky |\n"
         f"|---|---|\n"
         f"| LIVE | Přesná live E2 logika (9 podmínek) přes sdílený strategy.py engine — "
-        f"tentýž kód, co běží v dashboardu a e2_trackeru. Vstup: open příští svíčky, SL/TP 1.5×ATR. |\n"
+        f"tentýž kód, co běží v dashboardu a e2_trackeru. Vstup: open příští svíčky, single TP1 1:1 (1.5×ATR). |\n"
+        f"| LIVE-L | Tatáž logika, ale TP **ladder**: 1/3 pozice na TP1=1R / TP2=2R / TP3=3R, "
+        f"po TP1 SL→break-even, po TP2 SL→TP1. Test hypotézy „nechat vítěze běžet\". |\n"
         f"| E2 | Konfluence 8 podmínek (bez Weekly Open): HTF+STF trend, RSI v pásmu, "
         f"close vs VWAP+POC, Vol=TRENDING, BOS souhlasí, divergence neblokuje. |\n"
         f"| H | E2 + 9. podmínka (Weekly Open bias) + limit vstup na time-based level (VAL/VAH/Wkly/Monday). |\n\n"
