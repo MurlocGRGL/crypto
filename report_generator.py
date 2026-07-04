@@ -11,6 +11,7 @@ Slouží jako strukturovaný přehled, ne jako finanční doporučení.
 from datetime import datetime
 import config
 import indicators as ind
+import strategy
 
 
 def _fmt(price, decimals=None):
@@ -34,49 +35,21 @@ def _compute_e2_signal(
     time_levels: dict | None = None,
 ) -> tuple[str, dict]:
     """
-    Vypočítá E2 signál (9 podmínek, RSI LONG 40–70 / SHORT 30–60).
-    9. podmínka: cena nad/pod Weekly Open = bullish/bearish bias.
-    Vrací (signal, checklist) kde signal = "LONG" / "SHORT" / "WAIT".
+    Zpětně kompatibilní obal — E2 logika nyní žije v strategy.py (jediný zdroj
+    pravdy). Ponecháno pro případné externí volání.
     """
-    vol_str  = (volatility_regime or {}).get("regime", "")
-    ms_str   = (market_structure or {}).get("structure", "")
-    div_str  = divergence or ""
-    vwap_str = (price_vs_vwap or "").lower()
-    tl       = time_levels or {}
-    wo       = tl.get("weekly_open")   # None = data nedostupná → podmínka neselhává
-
-    long_cond = {
-        "HTF BULLISH":       htf_trend == "BULLISH",
-        "STF BULLISH":       stf_trend == "BULLISH",
-        "RSI 40–70":         rsi_val is not None and 40.0 <= rsi_val <= 70.0,
-        "Cena nad VWAP":     "nad" in vwap_str,
-        "Cena nad POC":      poc is not None and last_price > poc,
-        "Vol. TRENDING":     vol_str == "TRENDING",
-        "BOS BULLISH":       ms_str == "BULLISH",
-        "Bez bear. div.":    "BEARISH" not in div_str,
-        "Nad Weekly Open":   wo is None or last_price > wo,
-    }
-    short_cond = {
-        "HTF BEARISH":       htf_trend == "BEARISH",
-        "STF BEARISH":       stf_trend == "BEARISH",
-        "RSI 30–60":         rsi_val is not None and 30.0 <= rsi_val <= 60.0,
-        "Cena pod VWAP":     "pod" in vwap_str,
-        "Cena pod POC":      poc is not None and last_price < poc,
-        "Vol. TRENDING":     vol_str == "TRENDING",
-        "BOS BEARISH":       ms_str == "BEARISH",
-        "Bez bull. div.":    "BULLISH" not in div_str,
-        "Pod Weekly Open":   wo is None or last_price < wo,
-    }
-
-    if all(long_cond.values()):
-        return "LONG", long_cond
-    if all(short_cond.values()):
-        return "SHORT", short_cond
-
-    long_score  = sum(long_cond.values())
-    short_score = sum(short_cond.values())
-    checklist   = long_cond if long_score >= short_score else short_cond
-    return "WAIT", checklist
+    return strategy.evaluate_e2_conditions(
+        htf_trend=htf_trend,
+        stf_trend=stf_trend,
+        rsi_val=rsi_val,
+        last_price=last_price,
+        price_vs_vwap=price_vs_vwap,
+        poc=poc,
+        volatility_regime=volatility_regime,
+        market_structure=market_structure,
+        divergence=divergence,
+        time_levels=time_levels,
+    )
 
 
 def _trend_from_ichimoku_text(text: str) -> str:
@@ -139,49 +112,13 @@ def build_symbol_analysis(
 
     impuls_text = f"RSI({momentum_tf['rsi']:.0f}) na momentum TF, cena je {momentum_tf['price_vs_vwap']}, {momentum_tf['divergence']}"
 
-    # --- Long / Short scénáře: kombinace Volume Profile + ATR + Time Levels ---
+    # --- Long / Short scénáře: vstupy pro strategy engine ---
     entry_tf = tf_1h or tf_4h or htf
     vp = entry_tf["volume_profile"]
     swing_high = entry_tf["swing_high"]
     swing_low = entry_tf["swing_low"]
     atr_val = entry_tf.get("atr") or last_price * 0.005
     tl = time_levels or {}
-
-    risk = max(atr_val * 1.5, abs(last_price - swing_low) * 0.5)
-
-    # Long vstupní zóna: nejbližší podpora pod cenou z time levels (Monday Low, Weekly Open)
-    # nebo VAL — whichever is higher (closest to current price)
-    _long_supports = [vp["val"]]
-    for _name in ("monday_low", "weekly_open", "monthly_open"):
-        _lvl = tl.get(_name)
-        if _lvl is not None and _lvl < last_price:
-            _long_supports.append(_lvl)
-    long_entry = max(_long_supports)
-    long_entry = max(long_entry, last_price * 0.990)   # max 1 % pod cenou
-
-    long_sl = min(swing_low, long_entry - risk)
-    long_tp1 = vp["poc"] if vp["poc"] > long_entry else long_entry + risk
-    long_tp2 = max(vp["vah"], swing_high)
-    long_tp3 = long_entry + (long_tp2 - long_entry) * 1.6
-
-    # Short vstupní zóna: nejbližší odpor nad cenou (Monday High, Weekly High) nebo VAH
-    _short_resistances = [vp["vah"]]
-    for _name in ("monday_high", "weekly_high", "prev_week_high", "prev_month_high"):
-        _lvl = tl.get(_name)
-        if _lvl is not None and _lvl > last_price:
-            _short_resistances.append(_lvl)
-    short_entry = min(_short_resistances)
-    short_entry = min(short_entry, last_price * 1.010)  # max 1 % nad cenou
-
-    short_sl = max(swing_high, short_entry + risk)
-    short_tp1 = vp["poc"] if vp["poc"] < short_entry else short_entry - risk
-    short_tp2 = min(vp["val"], swing_low)
-    short_tp3 = short_entry - (short_entry - short_tp2) * 1.6
-
-    invalidation = (
-        f"Long scénář padá při uzavření svíčky pod {_fmt(long_sl)}. "
-        f"Short scénář padá při uzavření svíčky nad {_fmt(short_sl)}."
-    )
 
     # --- BTC vliv (teď i s číselnou korelací, ne jen textem) ---
     if symbol == "BTC/USDT":
@@ -245,18 +182,30 @@ def build_symbol_analysis(
                 "volatility_regime": tf_res.get("volatility_regime"),
             }
 
-    # E2 paper trading signal (9 podmínek — přidán Weekly Open bias)
-    e2_signal, e2_checklist = _compute_e2_signal(
+    # --- Signál + obchodní úrovně přes sdílený strategy engine ---
+    # (dashboard, tracker i bot volají tentýž engine → žádné rozjezdy)
+    state = strategy.MarketState(
+        last_price=last_price,
         htf_trend=htf_trend,
         stf_trend=stf_trend,
-        rsi_val=rsi_val,
-        last_price=last_price,
+        rsi=rsi_val,
         price_vs_vwap=momentum_tf.get("price_vs_vwap", ""),
-        poc=(vp.get("poc") if vp else None),
+        divergence=entry_tf.get("divergence", ""),
         volatility_regime=vr,
         market_structure=ms,
-        divergence=entry_tf.get("divergence", ""),
+        volume_profile=vp,
+        swing_high=swing_high,
+        swing_low=swing_low,
+        atr=atr_val,
         time_levels=tl,
+    )
+    sig = strategy.evaluate(state)
+    e2_signal, e2_checklist = sig.side, sig.checklist
+    L, S = sig.long, sig.short
+
+    invalidation = (
+        f"Long scénář padá při uzavření svíčky pod {_fmt(L.sl)}. "
+        f"Short scénář padá při uzavření svíčky nad {_fmt(S.sl)}."
     )
 
     return {
@@ -266,8 +215,8 @@ def build_symbol_analysis(
         "htf_trend": htf_trend,
         "stf_trend": stf_trend,
         "impuls_text": impuls_text,
-        "long": {"entry": long_entry, "sl": long_sl, "tp1": long_tp1, "tp2": long_tp2, "tp3": long_tp3},
-        "short": {"entry": short_entry, "sl": short_sl, "tp1": short_tp1, "tp2": short_tp2, "tp3": short_tp3},
+        "long": L.as_dict(),
+        "short": S.as_dict(),
         "invalidation": invalidation,
         "btc_influence": btc_influence,
         "correlation_btc": correlation_btc,
