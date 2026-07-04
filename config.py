@@ -9,8 +9,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Mince, které se sledují
+# Mince, které se sledují (stahují se a zobrazují v dashboardu všechny)
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "HYPE/USDT"]
+
+# Mince, pro které se LOGUJÍ paper-trade signály do e2_trackeru.
+# Podmnožina SYMBOLS — jen ty s prokázaným edge z walk-forward analýzy
+# (walk_forward.py, 3 roky / 6 půlroků). Ostatní se pořád stahují a zobrazují
+# v dashboardu, ale netvoří paper-trade záznamy (nesbírá se šum bez edge).
+#   BTC  — robustní směrový edge: kladná expectancy 5/6 půlroků
+#   SOL  — robustní edge: kladná expectancy 5/6 půlroků, přežívá i fees
+#   ETH  — smíšený (3/6), zatím neprokázaný → jen monitoring (snadno zapneš níž)
+#   HYPE — nespolehlivý + malý vzorek (~1 rok), záporný celkově → jen monitoring
+PAPER_TRADE_SYMBOLS = ["BTC/USDT", "SOL/USDT"]
 
 # Timeframy, které se stahují pro každou minci
 TIMEFRAMES = ["15m", "1h", "4h", "1d"]

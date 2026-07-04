@@ -199,6 +199,10 @@ def _log_new(rows: list, analyses: list, om: dict) -> int:
         if a.get("error"):
             continue
         sym = a["symbol"]
+        # Loguj jen symboly s prokázaným edge (walk-forward). Ostatní se stahují
+        # a zobrazují v dashboardu, ale netvoří nové paper-trade záznamy.
+        if sym not in config.PAPER_TRADE_SYMBOLS:
+            continue
         sig = a.get("e2_signal", "WAIT")
         if sig not in ("LONG", "SHORT") or sym in om:
             continue
